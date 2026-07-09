@@ -29,14 +29,14 @@
      inkscape:document-units="px"
      showgrid="true"
      inkscape:zoom="1.4363106"
-     inkscape:cx="108.26349"
-     inkscape:cy="177.53819"
+     inkscape:cx="107.91538"
+     inkscape:cy="177.5382"
      inkscape:window-width="1440"
      inkscape:window-height="868"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer4">
+     inkscape:current-layer="layer1">
     <inkscape:grid
        id="grid1"
        units="px"
@@ -237,6 +237,6 @@
          y="146.5119"
          id="tspan2"
          transform="matrix(1.5810731,0,0,1.2982115,-40.037419,-101.76601)"
-         style="stroke:#00aaff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1">  x86</tspan></text>
+         style="stroke:#00aaff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1">  x86_</tspan></text>
   </g>
 </svg>
