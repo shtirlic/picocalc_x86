@@ -1,5 +1,8 @@
 # PicoCalc x86
 
+![image](splash.svg)
+
+
 8086/80186 emulator for ClockWorkPi PicoCalc (https://www.clockworkpi.com/picocalc)
 with Raspberry Pi Pico 2 mcu board.
 
