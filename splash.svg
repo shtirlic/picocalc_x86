@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="320"
+   height="320"
+   viewBox="0 0 320 320"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   sodipodi:docname="splash.svg"
+   inkscape:export-filename="splash.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     showgrid="true"
+     inkscape:zoom="1.4363106"
+     inkscape:cx="108.26349"
+     inkscape:cy="177.53819"
+     inkscape:window-width="1440"
+     inkscape:window-height="868"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer4">
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="0"
+       originy="0"
+       spacingx="1"
+       spacingy="1"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="false" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1">
+    <linearGradient
+       id="swatch46"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#00aaff;stop-opacity:1;"
+         offset="0"
+         id="stop46" />
+    </linearGradient>
+    <linearGradient
+       id="swatch28"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#1a1a1a;stop-opacity:0;"
+         offset="0"
+         id="stop28" />
+    </linearGradient>
+    <color-profile
+       name="sRGB"
+       xlink:href="file:///usr/share/color/icc/colord/sRGB.icc"
+       id="color-profile2" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#swatch46"
+       id="linearGradient46"
+       x1="57.022101"
+       y1="108.66666"
+       x2="262.9779"
+       y2="108.66666"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     inkscape:groupmode="layer"
+     id="layer4"
+     inkscape:label="Layer 2">
+    <rect
+       style="fill:#1a1a1a;fill-rule:evenodd"
+       id="rect33"
+       width="320"
+       height="320"
+       x="0"
+       y="0" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer5"
+     inkscape:label="Layer 3">
+    <rect
+       style="fill:#c4c4c4;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-94"
+       width="32.400002"
+       height="32.400002"
+       x="257.20001"
+       y="223.8" />
+    <rect
+       style="fill:#c47e00;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-0"
+       width="32.400002"
+       height="32.400002"
+       x="224.8"
+       y="223.8" />
+    <rect
+       style="fill:#c400c4;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37"
+       width="32.400002"
+       height="32.400002"
+       x="192.40001"
+       y="223.8" />
+    <rect
+       style="fill:#c40000;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-4"
+       width="32.400002"
+       height="32.400002"
+       x="160"
+       y="223.8" />
+    <rect
+       style="fill:#00c4c4;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-3"
+       width="32.400002"
+       height="32.400002"
+       x="127.60001"
+       y="223.8" />
+    <rect
+       style="fill:#00c400;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-39"
+       width="32.400002"
+       height="32.400002"
+       x="95.199997"
+       y="223.8" />
+    <rect
+       style="fill:#0000c4;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-9"
+       width="32.400002"
+       height="32.400002"
+       x="62.799999"
+       y="223.8" />
+    <rect
+       style="fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-7"
+       width="32.400002"
+       height="32.400002"
+       x="30.399998"
+       y="223.8" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-94-4"
+       width="32.400002"
+       height="32.400002"
+       x="257.20001"
+       y="256.20001" />
+    <rect
+       style="fill:#f3f34e;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-0-7"
+       width="32.400002"
+       height="32.400002"
+       x="224.8"
+       y="256.20001" />
+    <rect
+       style="fill:#f34ef3;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-6"
+       width="32.400002"
+       height="32.400002"
+       x="192.40001"
+       y="256.20001" />
+    <rect
+       style="fill:#dc4e4e;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-4-3"
+       width="32.400002"
+       height="32.400002"
+       x="160"
+       y="256.20001" />
+    <rect
+       style="fill:#4ef3f3;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-3-1"
+       width="32.400002"
+       height="32.400002"
+       x="127.60001"
+       y="256.20001" />
+    <rect
+       style="fill:#4edc4e;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-39-7"
+       width="32.400002"
+       height="32.400002"
+       x="95.199997"
+       y="256.20001" />
+    <rect
+       style="fill:#4e4edc;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-9-5"
+       width="32.400002"
+       height="32.400002"
+       x="62.799999"
+       y="256.20001" />
+    <rect
+       style="fill:#4e4e4e;fill-opacity:1;fill-rule:evenodd;stroke-width:0.81"
+       id="rect37-7-9"
+       width="32.400002"
+       height="32.400002"
+       x="30.399998"
+       y="256.20001" />
+  </g>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     style="display:inline">
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:48px;font-family:'Edit Undo Line BRK';-inkscape-font-specification:'Edit Undo Line BRK, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;writing-mode:lr-tb;direction:ltr;fill:none;fill-opacity:0;stroke:#00aaff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+       x="57.400101"
+       y="86.511909"
+       id="text1"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         x="57.400101"
+         y="86.511909"
+         style="stroke:#00aaff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+         transform="matrix(0.48366043,0,0.26383789,1.3386655,61.859089,27.121661)"
+         inkscape:transform-center-x="-1.9897809"
+         inkscape:transform-center-y="-1.864043">PicoCalc</tspan><tspan
+         sodipodi:role="line"
+         x="57.400101"
+         y="146.5119"
+         id="tspan2"
+         transform="matrix(1.5810731,0,0,1.2982115,-40.037419,-101.76601)"
+         style="stroke:#00aaff;stroke-width:1;stroke-dasharray:none;stroke-opacity:1">  x86</tspan></text>
+  </g>
+</svg>
