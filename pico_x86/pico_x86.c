@@ -1011,12 +1011,13 @@ void pico_x86_cpu()
                 regs16[REG_AX] = 0;
                 break;
             }
-            if (likely(f_lseek(&fpd, (DWORD)regs16[REG_BP] << 9) == FR_OK)) {
+            DWORD abs_sector = ((DWORD)regs16[REG_SI] << 16) | regs16[REG_BP];
+            if (likely(f_lseek(&fpd, abs_sector << 9) == FR_OK)) {
                 f_read(&fpd, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &br);
             }
 
             if (unlikely(br == 0)) {
-                printf("\n[FATAL ERROR] Disk read failed at absolute sector %d!\n", regs16[REG_BP]);
+                printf("\n[FATAL ERROR] Disk read failed at absolute sector %lu!\n", abs_sector);
                 while (1)
                     ;
             }
@@ -1024,12 +1025,12 @@ void pico_x86_cpu()
         } break;
         case 3: {
             UINT bw = 0;
-            if (likely(f_lseek(&fpd, (DWORD)regs16[REG_BP] << 9) == FR_OK)) {
+            DWORD abs_sector = ((DWORD)regs16[REG_SI] << 16) | regs16[REG_BP];
+            if (likely(f_lseek(&fpd, abs_sector << 9) == FR_OK)) {
                 f_write(&fpd, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &bw);
             }
             if (unlikely(bw == 0)) {
-                printf(
-                    "\n[FATAL ERROR] Disk write failed at absolute sector %d!\n", regs16[REG_BP]);
+                printf("\n[FATAL ERROR] Disk write failed at absolute sector %lu!\n", abs_sector);
                 while (1)
                     ;
             }
