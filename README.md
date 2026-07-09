@@ -86,10 +86,14 @@ git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
 
  * [ ] Fix CGA text output in graphics mode for mode 4 and mode 6
  * [ ] Add good 8x8 font for 40 column text mode
+ * [ ] Make screenshot function (hotkey) via saving on SD Card
  * [ ] Support PSRAM connected via QMI like Pimoroni Pico 2 (map memory to 640kb)
  * [ ] EMS 3.2 full testing
+ * [ ] UART passthrough to host PC as COM1 (modem etc)
+ * [ ] Pico 2 W some network emulation
+ * [ ] Pico 2 LED support
  * [ ] Support ctrl+f1 or alt+f1 and other keystrokes
- * [ ] MCGA?
+ * [ ] MCGA? mode 13h 320x200 256-color mode via PSRAM
  * [ ] More hardware devices emulation
  * [ ] Add floppy support via fd.img
  * [ ] BIOS boot menu
