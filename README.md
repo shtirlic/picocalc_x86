@@ -14,13 +14,17 @@ Also using:
 The project is targeting Raspberry Pi Pico 2 RISC-V Hazard3 cores, no plans for ARM cores
 if someone wants to run on ARM cores it would be very easy to adapt it.
 
-In stock config the available conventional RAM is  417792(0x66000) bytes, or 408 KB.
+RAM:
+In stock config the available conventional **RAM is 417792(0x66000) bytes, or 408 KB**.
 16 KB video ram for CGA. 16 KB for BIOS.
+
+Performance:
+It's around ~1 MIPS, so like IMB PC AT or overpowered XT or PS/2 model 30.
 
 ## Getting Started
 
 Images avilable only for Raspberry Pi Pico 2 for now.
-Load uf2 firmage image via `picotool` or USB mass storage method.
+Load uf2 firmware image via `picotool` or USB mass storage method.
 Format SD card with FAT32 file system, create `x86` dir in the root and put desired `hd.img`
 Final path on the SD Card `/x86/hd.img`
 
@@ -39,7 +43,7 @@ mount c hd.img -t hdd -fs none -size 512,63,8,1023
 * Use `fdisk` to create partion table and make it bootable.
 * Install the operating system.
 
-Then you can mount your `hd.img` and transfer files in dosbox via:
+Then you can mount your `hd.img` and transfer files in `dosbox` via:
 
 ```
 mount c hd.img -t hdd -fs fat -size 512,63,8,1023
@@ -66,15 +70,21 @@ Optional:
 
 
 ```
-git clone  https://github.com/shtirlic/picocalc_x86
-cd picocalc_x86
-git submodule update --recursive
+git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
 ```
 
 ## Todo
 
- * [] Support PSRAM connected via QMI
- * [] EMS 3.2 full testing
- * [] Support ctrl+f1 or alt+f1 and other keystrokes
- * [] MCGA?
- * [] More hardware devices
+ * [ ] Fix CGA text output in graphics mode for mode 4 and mode 6
+ * [ ] Add good 8x8 font for 40 column text mode
+ * [ ] Support PSRAM connected via QMI like Pimoroni Pico 2 (map memory to 640kb)
+ * [ ] EMS 3.2 full testing
+ * [ ] Support ctrl+f1 or alt+f1 and other keystrokes
+ * [ ] MCGA?
+ * [ ] More hardware devices emulation
+ * [ ] Add floppy support via fd.img
+ * [ ] BIOS boot menu
+ * [ ] Better emulation for disk subsystems
+ * [ ] Enable bios override from SD card
+ * [ ] Support backlights and power resets via https://git.jcsmith.fr/jackcartersmith/picocalc_BIOS
+* [ ] Pass all test for CGA comp https://github.com/MobyGamer/CGACompatibilityTester
