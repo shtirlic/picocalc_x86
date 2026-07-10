@@ -413,11 +413,78 @@ int10_set_page:
 	call	clear_screen
 	iret
 
-  cls_partial:
-	mov	bl, al		; Number of rows to scroll are now in bl
-	cmp	bl, 0		; Clear whole window?
-	jne	int10_scroll_up_vmem_update
-	mov	bl, 25		; 25 rows
+cls_partial:
+	cmp	al, 0
+	je	int10_fast_clear_up
+
+	mov	bl, al
+	jmp	int10_scroll_up_vmem_update
+
+int10_fast_clear_up:
+int10_fast_clear_down:
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	di
+	push	si
+	push	es
+	push	ds
+
+	mov	ax, BDATASEG
+	mov	ds, ax
+
+	mov	ax, [ds:vmem_offset-bios_data]
+	push	cx
+	mov	cl, 4
+	shr	ax, cl
+	pop	cx
+	add	ax, 0xb800
+	mov	es, ax
+
+.fast_clear_row_loop:
+	; DI = (CH * vid_cols + CL) * 2
+	mov	ax, 0
+	mov	al, ch
+	push	dx
+	mov	dx, [ds:vid_cols-bios_data]
+	mul	dx
+	pop	dx
+
+	mov	si, ax		; si = CH * vid_cols
+	mov	ax, 0
+	mov	al, cl
+	add	ax, si
+	shl	ax, 1
+	mov	di, ax
+
+	; DL - CL + 1
+	mov	ax, 0
+	mov	al, dl
+	sub	al, cl
+	inc	ax
+
+	push	cx
+	mov	cx, ax
+	mov	ah, bh
+	mov	al, 0x20
+	cld
+	rep	stosw
+	pop	cx
+
+	inc	ch
+	cmp	ch, dh
+	jbe	.fast_clear_row_loop
+
+	pop	ds
+	pop	es
+	pop	si
+	pop	di
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
+	iret
 
 int10_scroll_up_vmem_update:
 	push	bx
@@ -429,73 +496,69 @@ int10_scroll_up_vmem_update:
 	push	si
 	push	di
 
-	push	bx
-	mov	bx, 0xb800
-	mov	es, bx
-	mov	ds, bx
-	pop	bx
-
-	mov	bl, al
-	cmp	bl, 0
-	jne	cls_vmem_scroll_up_next_line
-	mov	bl, 25      ; AL=0 means clear whole window
+	push	ax
+	push	cx
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	ax, [ds:vmem_offset-bios_data]
+	mov	cl, 4
+	shr	ax, cl
+	add	ax, 0xb800
+	mov	es, ax
+	mov	ds, ax
+	pop	cx
+	pop	ax
 
     cls_vmem_scroll_up_next_line:
 	push	cx
 	push	dx
 
 cls_vmem_scroll_up_one:
-	push	bx
 	push	dx
 	mov	ax, 0
-	mov	al, ch		; Start row number is now in AX
+	mov	al, ch
 
 	push	ds
-	mov	bx, BDATASEG
-	mov	ds, bx
-	mov	bx, [vid_cols-bios_data]
+	mov	dx, BDATASEG
+	mov	ds, dx
+	mov	dx, [vid_cols-bios_data]
 	pop	ds
 
-	mul	bx
+	mul	dx
 	add	al, cl
-	adc	ah, 0		; Character number is now in AX
-	mov	bx, 2
-	mul	bx		; Memory location is now in AX
+	adc	ah, 0
+	shl	ax, 1
 	pop	dx
-	pop	bx
 
     mov	di, ax
 	mov	si, ax
 
-    push	bx
 	push	ds
-	mov	bx, BDATASEG
-	mov	ds, bx
-	mov	bx, [vid_cols-bios_data]
-	shl	bx, 1
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	ax, [vid_cols-bios_data]
+	shl	ax, 1
 	pop	ds
 
-	add	si, bx
-    pop	bx
+	add	si, ax
 
 	mov	ax, 0
 	add	al, dl
 	adc	ah, 0
 	inc	ax
 	sub	al, cl
-	sbb	ah, 0		; AX now contains the number of characters from the row to copy
+	sbb	ah, 0
 
 	cmp	ch, dh
 	jae	cls_vmem_scroll_up_one_done
 
-vmem_scroll_up_copy_next_row:
 	push	cx
-	mov	cx, ax		; CX is now the length (in words) of the row to copy
+	mov	cx, ax
 	cld
-	rep	movsw		; Scroll the line up
+	rep	movsw
 	pop	cx
 
-	inc	ch		; Move onto the next row
+	inc	ch
 	jmp	cls_vmem_scroll_up_one
 
     cls_vmem_scroll_up_one_done:
@@ -544,14 +607,13 @@ vmem_scroll_up_copy_next_row:
 	call	clear_screen
 	iret
 
-  cls_partial_down:
-	mov	bx, 0
-	mov	bl, al		; Number of rows to scroll are now in bl
+cls_partial_down:
+	cmp	al, 0
+	je	int10_fast_clear_down
 
-	cmp	bl, 0		; Clear whole window?
-	jne	int10_scroll_down_vmem_update
+	mov	bl, al		; Number of rows to scroll are now in BL (Leaves BH alone)
+	jmp	int10_scroll_down_vmem_update
 
-	mov	bl, 25		; 25 rows
 
 int10_scroll_down_vmem_update:
 	push	ax
@@ -563,54 +625,51 @@ int10_scroll_down_vmem_update:
 	push	si
 	push	di
 
-	push	bx
-	mov	bx, 0xb800
-	mov	es, bx
-	mov	ds, bx
-	pop	bx
-
-	mov	bl, al
-	cmp	bl, 0
-	jne	cls_vmem_scroll_down_next_line
-	mov	bl, 25      ; AL=0 means clear whole window
+	push	ax
+	push	cx
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	ax, [ds:vmem_offset-bios_data]
+	mov	cl, 4
+	shr	ax, cl
+	add	ax, 0xb800
+	mov	es, ax
+	mov	ds, ax
+	pop	cx
+	pop	ax
 
     cls_vmem_scroll_down_next_line:
 	push	cx	; WINDOW BOUNDS (CH, CL)
 	push	dx	; WINDOW BOUNDS (DH, DL)
 
     cls_vmem_scroll_down_one:
-	push	bx
 	push	dx
 	mov	ax, 0
 	mov	al, dh		; End row number is now in AX
 
-    push	bx
 	push	ds
-	mov	bx, BDATASEG
-	mov	ds, bx
-	mov	bx, [vid_cols-bios_data]
+	mov	dx, BDATASEG
+	mov	ds, dx
+	mov	dx, [vid_cols-bios_data]
 	pop	ds
 
-	mul	bx
+	mul	dx
 	add	al, cl
 	adc	ah, 0		; Character number is now in AX
-	mov	bx, 2
-	mul	bx		; Memory location (start of final row) is now in AX
+	shl	ax, 1		; Memory location (start of final row) is now in AX
 	pop	dx
-	pop	bx
 
     mov	di, ax
 	mov	si, ax
 
 	push	ds
-	mov	bx, BDATASEG
-	mov	ds, bx
-	mov	bx, [vid_cols-bios_data]
-	shl	bx, 1
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	ax, [vid_cols-bios_data]
+	shl	ax, 1
 	pop	ds
 
-	sub	si, bx
-    pop	bx
+	sub	si, ax
 
 	mov	ax, 0
 	add	al, dl
@@ -633,9 +692,9 @@ int10_scroll_down_vmem_update:
 
     cls_vmem_scroll_down_one_done:
 	push	cx
-	mov	cx, ax		; CX is now the length (in words) of the row to copy
-	mov	ah, bh		; Attribute for new line
-	mov	al, 0x20	; Write Space
+	mov	cx, ax
+	mov	ah, bh
+	mov	al, 0x20
 	cld
 	rep	stosw
 	pop	cx
@@ -1086,7 +1145,6 @@ int10_write_char_common:
 	jmp	int10_write_char_attrib_done
 
 int10_write_char_attrib_newline:
-
 	mov	byte [curpos_x-bios_data], 0
 	mov	byte [crt_curpos_x-bios_data], 0
 	inc	byte [curpos_y-bios_data]
@@ -1097,18 +1155,17 @@ int10_write_char_attrib_newline:
 	mov	byte [curpos_y-bios_data], 24
 	mov	byte [crt_curpos_y-bios_data], 24
 
+	mov	ah, 0x06	; Scroll up
+	mov	al, 1		; Scroll 1 line
 	mov	bh, 7
-	mov	al, 1
-	mov	cx, 0
+	mov	cx, 0		; Top-left (0,0)
 
-	; Set DL to max column (vid_cols - 1), DH to 24 (0x18)
+	; (vid_cols - 1), DH to 24 (0x18)
 	mov	dl, [vid_cols-bios_data]
 	dec	dl
-	mov	dh, 0x18
+	mov	dh, 0x18	; Bottom-right row
 
-	pushf
-	push	cs
-	call	int10_scroll_up_vmem_update
+	int	10h
 
 int10_write_char_attrib_done:
 
