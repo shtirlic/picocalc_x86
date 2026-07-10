@@ -457,188 +457,7 @@ boot_disk:
 
 ; ************************* INT 9h handler - keyboard (PC BIOS standard)
 
-int9:
-    push ax
-    push bx
-    push cx
-    push ds
-
-    mov ax, BDATASEG
-    mov ds, ax           ; DS = BDA Segment
-
-    in al, 0x60          ; Read hardware scancode from port 60h
-    mov ah, al           ; Save raw scancode to AH
-    and al, 0x7F         ; Strip the break bit to get the base code
-
- cmp al, 0x2A         ; L-Shift
-    je .mod_lshift
-    cmp al, 0x36         ; R-Shift
-    je .mod_rshift
-    cmp al, 0x1D         ; Ctrl
-    je .mod_ctrl
-    cmp al, 0x38         ; Alt
-    je .mod_alt
-    cmp al, 0x3A         ; Caps Lock
-    je .mod_capslock
-    jmp .decode_normal
-
-.mod_lshift:
-    mov bl, 0x02         ; L-Shift flag (bit 1)
-    jmp .update_mod
-.mod_rshift:
-    mov bl, 0x01         ; R-Shift flag (bit 0)
-    jmp .update_mod
-.mod_ctrl:
-    mov bl, 0x04         ; Ctrl flag (bit 2)
-    jmp .update_mod
-.mod_alt:
-    mov bl, 0x08         ; Alt flag (bit 3)
-
-.update_mod:
-    test ah, 0x80        ; Is it a Key Release (Break)?
-    jnz .mod_released
-    or [0x17], bl        ; Key Pressed: Set the flag in BDA
-    jmp .int9_exit
-.mod_released:
-    not bl
-    and [0x17], bl       ; Key Released: Clear the flag in BDA
-    jmp .int9_exit
-
-.mod_capslock:
-    test ah, 0x80        ; Is it a Key Release?
-    jnz .int9_exit       ; Ignore releases entirely!
-    xor byte [0x17], 0x40 ; Toggle the Caps Lock state (bit 6) in the BDA
-    jmp .int9_exit
-
-.decode_normal:
-    test ah, 0x80        ; Ignore normal key releases
-    jnz .int9_exit
-
-    ; 2. --- SPECIAL KEY CHECK (F-Keys, Arrows, Nav) ---
-    cmp al, 0x3B
-    jae .special_key
-
-    ; 3. --- TRANSLATE SCANCODE TO ASCII ---
-    mov bx, 0
-    mov bl, al           ; BX = Scancode index
-
-    ; Check Alt first
-    test byte [0x17], 0x08
-    jnz .use_alt
-
-    ; Check Ctrl next
-    test byte [0x17], 0x04
-    jnz .use_ctrl
-
-    ; Check Shift (Either L-Shift or R-Shift)
-    test byte [0x17], 0x03
-    jnz .use_shifted
-
-    ; Unshifted Lookup
-    mov al, [cs:scan_to_ascii_unshifted + bx]
-    jmp .apply_caps
-
-.use_shifted:
-    mov al, [cs:scan_to_ascii_shifted + bx]
-
-.apply_caps:
-    test byte [0x17], 0x40   ; Is Caps Lock ON?
-    jz .insert_buffer        ; If not, skip to buffer insertion
-
-    ; Caps Lock is ON. Check if the character is a letter.
-    cmp al, 'A'
-    jb .insert_buffer        ; Below 'A'? Not a letter.
-    cmp al, 'z'
-    ja .insert_buffer        ; Above 'z'? Not a letter.
-    cmp al, 'Z'
-    jbe .flip_case           ; A-Z? Flip it!
-    cmp al, 'a'
-    jae .flip_case           ; a-z? Flip it!
-    jmp .insert_buffer       ; Anything in between (like [, \, ]) skip it.
-
-.flip_case:
-    xor al, 0x20             ; ASCII Magic: Flips uppercase to lowercase and vice versa!
-    jmp .insert_buffer
-
-.use_alt:
-    mov al, 0x00         ; Alt combos produce AL=0x00, AH=Scancode
-    jmp .insert_buffer
-
-.use_ctrl:
-    mov al, [cs:scan_to_ascii_unshifted + bx]
-    cmp al, 'a'
-    jb .insert_buffer
-    cmp al, 'z'
-    ja .insert_buffer
-    and al, 0x1F         ; Converts 'a' -> 0x01 (Ctrl+A), 'o' -> 0x0F (Ctrl+O)
-    jmp .insert_buffer
-
-.special_key:
-    ; Hardware exceptions for Numpad '-' and '+'
-    cmp al, 0x4A
-    je .numpad_minus
-    cmp al, 0x4E
-    je .numpad_plus
-
-    ; All other F-keys, Arrows, and Nav keys get AL = 0x00
-    mov al, 0x00
-    jmp .insert_buffer
-
-.numpad_minus:
-    mov al, '-'
-    jmp .insert_buffer
-
-.numpad_plus:
-    mov al, '+'
-
-.insert_buffer:
-    ; AL now holds ASCII (or 0x00/Control code), AH holds original Scancode
-    mov cx, ax
-
-    ; 4. --- MANAGE THE BIOS CIRCULAR RING BUFFER ---
-    mov bx, [0x1C]       ; Get Tail pointer (kbbuf_tail)
-    mov ax, bx
-    add ax, 2            ; Advance Tail by 2 bytes
-    cmp ax, 0x003E       ; Have we reached the end of the buffer?
-    jne .no_wrap
-    mov ax, 0x001E       ; Wrap around to start
-.no_wrap:
-    cmp ax, [0x1A]       ; Compare new Tail with Head (kbbuf_head)
-    je .int9_exit        ; Buffer Full! Drop the keystroke
-
-    mov [bx], cx         ; Store [ASCII | Scancode] into memory
-    mov [0x1C], ax       ; Save the new Tail pointer
-
-.int9_exit:
-    ; Hardware Acknowledge (Send EOI to PIC)
-    mov al, 0x20
-    out 0x20, al
-
-    pop ds
-    pop cx
-    pop bx
-    pop ax
-    iret
-
-; --- XT Scancode to ASCII Translation Tables ---
-scan_to_ascii_unshifted:
-    db 0, 27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 8, 9
-    db 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 13, 0, 'a', 's'
-    db 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', 39, '`', 0, 92, 'z', 'x', 'c', 'v'
-    db 'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0
-    db 0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1'
-    db '2', '3', '0', '.', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    times 32 db 0
-
-scan_to_ascii_shifted:
-    db 0, 27, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 8, 9
-    db 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 13, 0, 'A', 'S'
-    db 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', 34, '~', 0, '|', 'Z', 'X', 'C', 'V'
-    db 'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0
-    db 0, 0, 0, 0, 0, 0, 0, '7', '8', '9', '-', '4', '5', '6', '+', '1'
-    db '2', '3', '0', '.', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    times 32 db 0
-
+%include "bios_keyb.asm"
 
 ; ************************* INT Ah handler - timer (Hardware Paced)
 
@@ -1060,8 +879,8 @@ int15:	; Here we do not support any of the functions, and just return
 	je	int15_sysconfig
 	; cmp	ah, 0x41
 	; je	int15_waitevent
-	; cmp	ah, 0x4f
-	; je	int15_intercept
+	cmp	ah, 0x4f
+	je	int15_4f_intercept
 	; cmp	ah, 0x88
 	; je	int15_getextmem
 
@@ -1086,9 +905,19 @@ int15:	; Here we do not support any of the functions, and just return
 ;
 ;	jmp	reach_stack_stc
 ;
-;  int15_intercept: ; Keyboard intercept
-;
-;	jmp	reach_stack_stc
+int15_4f_intercept:
+    push bp
+    mov bp, sp
+
+    ; bp+0 = saved BP
+    ; bp+2 = saved IP
+    ; bp+4 = saved CS
+    ; bp+6 = saved FLAGS
+
+    and word [bp+6], 0xFFFE ; Clear the Carry Flag (bit 0) in the pushed FLAGS
+
+    pop bp
+    iret
 ;
 ;  int15_getextmem: ; Extended memory not supported
 ;
