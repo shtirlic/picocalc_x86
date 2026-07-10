@@ -39,21 +39,29 @@
 #define REGS_BASE 0x6E000
 #define LOW_MEM_LIMIT 0x66000 // Available memrory to DOS
 
-extern uint32_t page_offset_lut[128];
+// clang-format off
+static uint32_t __always_inline MAP_ADDR(uint32_t A) {
 
-// 8KB Page Table Translation
-static __always_inline uint32_t MAP_ADDR(uint32_t A)
-{
-    A &= 0xFFFFF; // 1MB x86 address space
+    A &= 0xFFFFF;
 
-    if (likely(A < LOW_MEM_LIMIT)) {
+    // Direct map
+    if (likely(A < LOW_MEM_LIMIT))
         return A;
-    }
 
-    uint32_t entry = page_offset_lut[A >> 13];
+    // CGA VRAM (Strictly 16KB: 0xB8000-0xBBFFF)
+    if (A >= 0xB8000 && A < 0xBC000)
+        return 0x66000 + (A - 0xB8000);
 
-    // Extract base offset (lower 19 bits) and mask (upper 13 bits)
-    return (entry & 0x7FFFF) + (A & (entry >> 19));
+    // EMS page frame D0000-D3FFF (Strictly 16KB)
+    if (A >= 0xD0000 && A < 0xD4000)
+        return 0x6A000 + (A - 0xD0000);
+
+    // BIOS ROM F0000-FFFFF (Aliased into 16KB physical space)
+    if (A >= 0xF0000)
+        return 0x6E000 + ((A - 0xF0000) & 0x3FFF);
+
+    // all other unmapped memory
+    return 0x72000 + (A & 3);
 }
 
 // 16-bit register decodes

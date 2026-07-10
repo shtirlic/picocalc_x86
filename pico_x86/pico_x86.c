@@ -35,11 +35,9 @@ uint32_t __scratch_x("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
 register uint32_t raw_opcode_id asm("s5");
 register uint32_t seg_override_en asm("s6");
 
-uint32_t __scratch_x("cpu") page_offset_lut[128];
-
 uint32_t __scratch_x("cpu") int8_asap = 0;
 
-uint16_t __scratch_x("cpu") reg_ip, seg_override, file_index, wave_counter;
+uint16_t __scratch_x("cpu") reg_ip, seg_override;
 
 uint32_t __scratch_x("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint, set_flags_type;
@@ -133,13 +131,13 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 // Helper functions
 
 // Set carry flag
-static __always_inline char set_CF(int new_CF) { return regs8[FLAG_CF] = !!new_CF; }
+static char __always_inline set_CF(int new_CF) { return regs8[FLAG_CF] = !!new_CF; }
 
 // Set auxiliary flag
-static __always_inline char set_AF(int new_AF) { return regs8[FLAG_AF] = !!new_AF; }
+static char __always_inline set_AF(int new_AF) { return regs8[FLAG_AF] = !!new_AF; }
 
 // Set overflow flag
-static __always_inline char set_OF(int new_OF) { return regs8[FLAG_OF] = !!new_OF; }
+static char __always_inline set_OF(int new_OF) { return regs8[FLAG_OF] = !!new_OF; }
 
 // Set auxiliary and overflow flag after arithmetic operations
 static char __time_critical_func(set_AF_OF_arith)()
@@ -204,7 +202,7 @@ static char __time_critical_func(pc_interrupt)(uint8_t interrupt_num)
 }
 
 // AAA and AAS instructions - which_operation is +1 for AAA, and -1 for AAS
-static __always_inline int AAA_AAS(char which_operation)
+static int __always_inline AAA_AAS(char which_operation)
 {
     return (regs16[REG_AX]
         += 262 * which_operation * set_AF(set_CF(((regs8[REG_AL] & 0x0F) > 9) || regs8[FLAG_AF])),
@@ -320,43 +318,6 @@ static uint8_t map_ems_page(uint8_t phys_page, uint16_t handle, uint16_t logical
     return 0x00;
 }
 
-// 128 entries * 4 bytes = 512 bytes of SRAM
-uint32_t __scratch_x("cpu") page_offset_lut[128];
-
-void init_mmu_lut()
-{
-    for (int i = 0; i < 128; i++) {
-        uint32_t addr = i * 0x2000; // 8KB block
-        uint32_t base = 0;
-        uint32_t mask = 0x1FFF; // Default mask
-
-        // Direct map (Low Memory)
-        if (addr < 0x66000) {
-            base = addr;
-        }
-        // CGA VRAM
-        else if (addr >= 0xB8000 && addr < 0xBC000) {
-            base = 0x66000 + (addr - 0xB8000);
-        }
-        // EMS page frame
-        else if (addr >= 0xD0000 && addr < 0xD4000) {
-            base = 0x6A000 + (addr - 0xD0000);
-        }
-        // BIOS ROM (Aliased 16KB space)
-        else if (addr >= 0xF0000) {
-            base = 0x6E000 + ((addr - 0xF0000) & 0x3FFF);
-        }
-        // Sink
-        else {
-            base = 0x72000;
-            mask = 0x3;
-        }
-
-        // mask into upper 13 bits and base into lower 19 bits
-        page_offset_lut[i] = base | (mask << 19);
-    }
-}
-
 void pico_x86_run()
 {
     printf("\n▼ Memory Size %d: bytes\n", RAM_SIZE);
@@ -415,7 +376,6 @@ void pico_x86_run()
         for (int j = 0; j < 256; j++)
             bios_table_lookup[i][j] = regs8[regs16[0x81 + i] + j];
 
-    init_mmu_lut();
     pico_x86_cpu();
 }
 

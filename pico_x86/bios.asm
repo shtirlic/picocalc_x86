@@ -70,8 +70,7 @@ main:
 
 biosstr db	'PicoCalc x86 BIOS Revision 0.5', 0, 0
 mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/10/26', 0, 0, 0xfa
-memteststr db   'Memory Test: ', 0
-kbokstr    db   ' KB OK', 0
+biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
 
 bios_entry:
 
@@ -2162,6 +2161,10 @@ int_table	dw int0
           	dw int1e
 
 itbl_size	dw $-int_table
+
+
+memteststr db   'Memory Test: ', 0
+kbokstr    db   ' KB OK', 0
 
 
 ; INT 8 millisecond counter

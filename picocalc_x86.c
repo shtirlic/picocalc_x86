@@ -23,11 +23,8 @@
 
 psram_spi_inst_t psram_spi;
 
-extern CRTC_State crtc;
-
 extern uint8_t mem[];
 extern uint8_t io_ports[];
-extern uint16_t wave_counter;
 extern uint32_t int8_asap;
 
 uint32_t video_frames;
@@ -38,6 +35,7 @@ uint64_t last_frame_tick;
 FATFS fs;
 
 #define PIT_BASE_HZ 1193182UL
+uint16_t wave_counter;
 extern uint32_t pwm_sample_hz;
 #define SPKR_AMPLITUDE 180 // headroom under wrap=250;
 
@@ -88,12 +86,10 @@ void __time_critical_func(second_core)(void)
     tick = time_us_64();
     last_frame_tick = tick;
 
+    video_cga_set_resolution(320, 320);
+
     picocalc_display_show_image(image_data_splash, sizeof(image_data_splash));
     sleep_ms(1000);
-
-    // uint8_t* video_base_ptr = &mem[MAP_ADDR(0xb8000)];
-    picocalc_display_set_vram(&mem[MAP_ADDR(0xb8000)], 320, 200);
-    picocalc_display_set_crtc(&crtc);
 
     while (1) {
         if (tick >= last_frame_tick + (1000000 / target_fps)) {
@@ -105,8 +101,9 @@ void __time_critical_func(second_core)(void)
 
             // uint8_t video_mode = mem[MAP_ADDR(0x449)];
             // printf("Video mode: %d \n", video_mode);
-            picocalc_display_refresh();
-            //       sleep_ms(1000);
+
+            picocalc_display_begin_frame();
+            video_cga_render(picocalc_display_put_color);
             video_frames++;
             last_frame_tick = tick;
         }
