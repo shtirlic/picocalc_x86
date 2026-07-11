@@ -16,6 +16,7 @@ target_sources(pico_x86 INTERFACE
 	pico_x86.c
     bios_embed.S
     pico_x86_video.c
+    pico_x86_serial.c
 )
 
 target_include_directories(pico_x86 INTERFACE ${CMAKE_CURRENT_LIST_DIR} )

@@ -204,12 +204,7 @@ void init()
     aon_timer_start_with_timeofday();
 
     stdio_init_all();
-    setvbuf(stdout, NULL, _IONBF, 0);
-
-    uart_init(uart0, 115200);
-
-    uart_set_format(uart0, 8, 1, UART_PARITY_NONE); // 8-N-1
-    // uart_set_fifo_enabled(uart0, false);
+    // setvbuf(stdout, NULL, _IONBF, 0);
 
     printf("%s", "\n\n▼ PicoCalc x86 Version 0.1\n");
 

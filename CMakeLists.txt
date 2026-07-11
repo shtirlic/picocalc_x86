@@ -49,7 +49,7 @@ target_compile_definitions(picocalc_x86 PRIVATE
     BIOS_EMBED
     # DEBUG_PERF
     # DEBUG_KBD
-    # DEBUG_UART
+    DEBUG_CONSOLE
     DEBUG_EMS
 )
 
@@ -88,6 +88,6 @@ target_link_libraries(picocalc_x86
     picocalc_sound
 	)
 
-pico_enable_stdio_usb(picocalc_x86 0)
-pico_enable_stdio_uart(picocalc_x86 1)
+pico_enable_stdio_usb(picocalc_x86 1)
+pico_enable_stdio_uart(picocalc_x86 0)
 pico_add_extra_outputs(picocalc_x86)

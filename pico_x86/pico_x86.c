@@ -12,6 +12,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "pico/aon_timer.h"
+#include "pico/time.h"
 
 #include "ff.h"
 #include "psram_spi.h"
@@ -19,6 +20,7 @@
 
 #include "pico_x86.h"
 #include "pico_x86_video.h"
+#include "pico_x86_serial.h"
 
 uint8_t __aligned(8) mem[RAM_SIZE + 16];
 
@@ -26,8 +28,11 @@ uint8_t __aligned(4) __scratch_x("io") io_ports[IO_PORT_COUNT];
 uint8_t bios_table_lookup[20][256];
 
 register uint8_t* opcode_stream asm("s2");
-register uint8_t* regs8 asm("s3");
-register uint16_t* regs16 asm("s4");
+// register uint8_t* regs8 asm("s3");
+// register uint16_t* regs16 asm("s4");
+
+uint8_t* regs8;
+uint16_t* regs16;
 
 uint32_t __scratch_x("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
     xlat_opcode_id, extra, rep_mode, rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en;
@@ -230,7 +235,7 @@ static void __time_critical_func(keyboard_process)()
         io_ports[0x60] = scancode;
         pc_interrupt(9);
     }
-#ifdef DEBUG_UART
+#ifdef DEBUG_CONSOLE
     if (unlikely(uart_is_readable(uart_default))) { }
 #endif
 }
@@ -752,6 +757,8 @@ void pico_x86_cpu()
             } else if (scratch_uint == 0x60) {
                 R_M_OP(regs8[REG_AL], =, io_ports[0x60]);
                 io_ports[0x64] = 0;
+            } else if (scratch_uint >= 0x3F8 && scratch_uint <= 0x3FF) {
+                serial_port_in(scratch_uint);
             }
             R_M_OP(regs8[REG_AL], =, io_ports[scratch_uint]);
         } else {
@@ -775,6 +782,10 @@ void pico_x86_cpu()
 
             if ((scratch_uint >= 0x03D0 && scratch_uint <= 0x03DF)) {
                 video_cga_port_out(scratch_uint);
+            }
+
+            if (scratch_uint >= 0x3F8 && scratch_uint <= 0x3FF) {
+                serial_port_out(scratch_uint);
             }
         }
         // scratch_uint == 0x3B5 && io_ports[0x3B4] == 1;
@@ -878,11 +889,11 @@ void pico_x86_cpu()
         NEXT_OP;
     OP_48: // Emulator-specific 0F xx opcodes
         switch ((int8_t)i_data0) {
-        case 0:
-            // putchar(regs8[0]);
-            // fflush(stdout);
+        case 0: { // INT 14h Serial Port I/O (COM1)
+            serial_ctl();
             break;
-        case 1:
+        }
+        case 1: {
             aon_timer_get_time(&ts);
             uint32_t dest = SEGREG(REG_ES, REG_BX, );
 
@@ -913,59 +924,8 @@ void pico_x86_cpu()
             CAST(int16_t)
             mem[dest + 36] = ts.tv_nsec / 1000000;
             break;
-
-        case 5: {
-            uint32_t src = SEGREG(REG_ES, REG_BX, );
-            struct tm new_tm = { 0 };
-            new_tm.tm_sec = (int32_t)CAST(uint32_t) mem[src + 0];
-            new_tm.tm_min = (int32_t)CAST(uint32_t) mem[src + 4];
-            new_tm.tm_hour = (int32_t)CAST(uint32_t) mem[src + 8];
-            new_tm.tm_mday = (int32_t)CAST(uint32_t) mem[src + 12];
-            new_tm.tm_mon = (int32_t)CAST(uint32_t) mem[src + 16];
-            new_tm.tm_year = (int32_t)CAST(uint32_t) mem[src + 20];
-
-            int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
-                                            : aon_timer_start_calendar(&new_tm);
-            if (likely(ok)) {
-                // save_rtc_to_disk(&new_tm);
-                regs8[REG_AL] = 0x00; // Success
-            } else {
-                regs8[REG_AL] = 0xFF; // Failure
-            }
-            break;
         }
-
-        case 6: {
-            uint32_t ticks = ((uint32_t)regs16[REG_CX] << 16) | regs16[REG_DX];
-            uint32_t hour = ticks / 65520;
-            uint32_t rem = ticks % 65520;
-            uint32_t min = rem / 1092;
-            rem %= 1092;
-            uint32_t sec = (rem * 10) / 182;
-
-            if (unlikely(hour > 23))
-                hour = 23;
-
-            struct tm new_tm = { 0 };
-            if (likely(aon_timer_get_time_calendar(&new_tm))) {
-                new_tm.tm_hour = hour;
-                new_tm.tm_min = min;
-                new_tm.tm_sec = sec;
-
-                int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
-                                                : aon_timer_start_calendar(&new_tm);
-                if (likely(ok)) {
-                    regs8[REG_AL] = 0x00;
-                } else {
-                    regs8[REG_AL] = 0xFF;
-                }
-            } else {
-                regs8[REG_AL] = 0xFF;
-            }
-            break;
-        }
-
-        case 2: {
+        case 2: { // DISK READ
             UINT br = 0;
             if (unlikely(regs16[REG_AX] == 0)) {
                 regs16[REG_AX] = 0;
@@ -977,26 +937,32 @@ void pico_x86_cpu()
             }
 
             if (unlikely(br == 0)) {
+#ifdef DEBUG_CONSOLE
                 printf("\n[FATAL ERROR] Disk read failed at absolute sector %lu!\n", abs_sector);
+#endif
                 while (1)
                     ;
             }
             regs16[REG_AX] = br;
-        } break;
-        case 3: {
+            break;
+        }
+        case 3: { // DISK WRITE
             UINT bw = 0;
             DWORD abs_sector = ((DWORD)regs16[REG_SI] << 16) | regs16[REG_BP];
             if (likely(f_lseek(&fpd, abs_sector << 9) == FR_OK)) {
                 f_write(&fpd, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &bw);
             }
             if (unlikely(bw == 0)) {
+#ifdef DEBUG_CONSOLE
                 printf("\n[FATAL ERROR] Disk write failed at absolute sector %lu!\n", abs_sector);
+#endif
                 while (1)
                     ;
             }
             regs16[REG_AX] = bw;
-        } break;
-        case 4: { // INT 67h - Hardware EMS Manager
+            break;
+        }
+        case 4: { // INT 67h Hardware EMS Manager
             uint8_t ah = regs8[REG_AH];
             switch (ah) {
             case 0x40: // Get Manager Status
@@ -1161,6 +1127,55 @@ void pico_x86_cpu()
             }
             break;
         }
+        case 5: {
+            uint32_t src = SEGREG(REG_ES, REG_BX, );
+            struct tm new_tm = { 0 };
+            new_tm.tm_sec = (int32_t)CAST(uint32_t) mem[src + 0];
+            new_tm.tm_min = (int32_t)CAST(uint32_t) mem[src + 4];
+            new_tm.tm_hour = (int32_t)CAST(uint32_t) mem[src + 8];
+            new_tm.tm_mday = (int32_t)CAST(uint32_t) mem[src + 12];
+            new_tm.tm_mon = (int32_t)CAST(uint32_t) mem[src + 16];
+            new_tm.tm_year = (int32_t)CAST(uint32_t) mem[src + 20];
+
+            int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
+                                            : aon_timer_start_calendar(&new_tm);
+            if (likely(ok)) {
+                // save_rtc_to_disk(&new_tm);
+                regs8[REG_AL] = 0x00; // Success
+            } else {
+                regs8[REG_AL] = 0xFF; // Failure
+            }
+            break;
+        }
+        case 6: {
+            uint32_t ticks = ((uint32_t)regs16[REG_CX] << 16) | regs16[REG_DX];
+            uint32_t hour = ticks / 65520;
+            uint32_t rem = ticks % 65520;
+            uint32_t min = rem / 1092;
+            rem %= 1092;
+            uint32_t sec = (rem * 10) / 182;
+
+            if (unlikely(hour > 23))
+                hour = 23;
+
+            struct tm new_tm = { 0 };
+            if (likely(aon_timer_get_time_calendar(&new_tm))) {
+                new_tm.tm_hour = hour;
+                new_tm.tm_min = min;
+                new_tm.tm_sec = sec;
+
+                int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
+                                                : aon_timer_start_calendar(&new_tm);
+                if (likely(ok)) {
+                    regs8[REG_AL] = 0x00;
+                } else {
+                    regs8[REG_AL] = 0xFF;
+                }
+            } else {
+                regs8[REG_AL] = 0xFF;
+            }
+            break;
+        }
         }
         NEXT_OP;
     OP_NOP: // Catch for unimplemented opcodes
@@ -1196,15 +1211,18 @@ void pico_x86_cpu()
 
         trap_flag = regs8[FLAG_TF];
 
-        // If a timer tick is pending, interrupts are enabled, and no
+        // If a timer tick or serial is pending, interrupts are enabled, and no
         // overrides/REP are active, then process the tick and check for new
         // keystrokes
         // At the end of the loop:
-        if (unlikely(int8_asap && !seg_override_en && !rep_override_en && regs8[FLAG_IF]
-                && !regs8[FLAG_TF])) {
-            pc_interrupt(0xA);
-            int8_asap = 0;
-            keyboard_process();
+        if ((!seg_override_en && !rep_override_en && regs8[FLAG_IF] && !regs8[FLAG_TF])) {
+            if (unlikely(int8_asap)) {
+                pc_interrupt(0xA);
+                int8_asap = 0;
+                keyboard_process();
+            } else if (unlikely(serial_int_pending())) {
+                pc_interrupt(0x0C); // Trigger IRQ 4
+            }
         }
 
 #ifdef DEBUG_PERF
