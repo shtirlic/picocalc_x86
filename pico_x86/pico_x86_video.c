@@ -215,7 +215,7 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
 {
 
     bool is_1bpp_mode = crtc.mcr_hires_graphics_mode;
-    const int OUTPUT_ROWS = 240;
+    const int OUTPUT_ROWS = 200;
     const int VERTICAL_MARGIN = (screen_height - OUTPUT_ROWS) / 2;
 
     // --- DECODE PALETTE & BACKGROUND SETTINGS ---
@@ -249,7 +249,7 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
     }
 
     for (int out_y = 0; out_y < OUTPUT_ROWS; out_y++) {
-        int y = (out_y * 200) / OUTPUT_ROWS;
+        int y = out_y;
         uint32_t bank_offset = (y & 1) ? 0x2000 : 0x0000;
         uint32_t row_offset = (y >> 1) * 80;
 
@@ -261,9 +261,8 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
 
             if (is_1bpp_mode) {
                 for (int p = 0; p < 4; p++) {
-                    uint8_t bit_hi = (pixel_data >> (7 - p * 2)) & 1;
-                    uint8_t bit_lo = (pixel_data >> (6 - p * 2)) & 1;
-                    uint16_t color = (bit_hi | bit_lo) ? m6_fg_color : m6_bg_color;
+                    uint8_t bit = (pixel_data >> (7 - p * 2)) & 1;
+                    uint16_t color = bit ? m6_fg_color : m6_bg_color;
 
                     put_color(color);
                 }
