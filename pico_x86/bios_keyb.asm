@@ -135,52 +135,21 @@ int9:
     ja .not_f_key
 
     ; --- WE HAVE AN F-KEY (F1-F10) ---
-    ; Check Alt first (Highest precedence usually, though IBM checks it in order)
-    test byte [0x17], 0x08
+    test byte [0x17], 0x08        ; Alt first (IBM order)
     jz .check_ctrl_fkey
-    add ah, 0x2D         ; Shift base AH by +45 (0x2D) for Alt+F1..F10
+    add ah, 0x2D                  ; Alt+F1..F10
     jmp .finish_fkey
 
 .check_ctrl_fkey:
-    ; Check Ctrl next
-    test byte [0x17], 0x04
+    test byte [0x17], 0x04        ; Ctrl next
     jz .check_shift_fkey
-    add ah, 0x23         ; Shift base AH by +35 (0x23) for Ctrl+F1..F10
+    add ah, 0x23                  ; Ctrl+F1..F10
     jmp .finish_fkey
 
 .check_shift_fkey:
-    ; Check if Right Shift is pressed (Bit 0 = 0x01)
-    test byte [0x17], 0x01
-    jnz .check_both_shifts
-
-    ; Right Shift is NOT pressed. Check Left Shift (Bit 1 = 0x02)
-    test byte [0x17], 0x02
-    jz .finish_fkey          ; No shifts at all -> Output normal base F-key
-
-    ; --- ONLY LEFT SHIFT IS PRESSED ---
-    cmp ah, 0x40             ; Is the hardware sending an F6-F10 scancode?
-    jb .normal_left_shift    ; If it's F1-F5, use standard math
-
-    ; Hardware sent F6-F10, but user ONLY pressed Left Shift.
-    ; Map it back to Shift + F1-F5 by adding +20 (0x14).
-    ; Example: F9 (0x43) + 0x14 = 0x57 (The correct extended code for Shift+F4)
-    add ah, 0x14
-    jmp .finish_fkey
-
-.normal_left_shift:
-    add ah, 0x19             ; Standard math (+25) for normal F1-F5
-    jmp .finish_fkey
-
-.check_both_shifts:
-    ; Right Shift IS pressed. Are they also holding Left Shift?
-    test byte [0x17], 0x02
-    jz .finish_fkey          ; ONLY Right Shift pressed -> Output normal F6-F10
-
-    ; --- BOTH SHIFTS PRESSED ---
-    ; User is holding Left Shift AND Right Shift (hardware layer).
-    ; Map to Shift + F6-F10 by adding standard +25 (0x19)
-    ; Example: F9 (0x43) + 0x19 = 0x5C (The correct extended code for Shift+F9)
-    add ah, 0x19
+    test byte [0x17], 0x02        ; Left-Shift is the only Shift
+    jz .finish_fkey               ; Not held -> plain F-key, AH unchanged
+    add ah, 0x19                  ; Shift+F1..F10
 
 .finish_fkey:
     mov al, 0x00             ; Set AL to 0x00 to signify an extended keycode

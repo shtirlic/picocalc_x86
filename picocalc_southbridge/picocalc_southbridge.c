@@ -40,7 +40,6 @@ static __always_inline uint8_t translate_kbd_code(uint8_t raw_code) {
 
         case 0xA1: return 0x38; // ALT
         case 0xA2: return 0x2A; // L-SHIFT
-        case 0xA3: return 0x36; // R-SHIFT
         case 0xA5: return 0x1D; // CTRL
         case 0x0A: return 0x1C; // ENTER
         case 0xB1: return 0x01; // ESC
@@ -100,6 +99,10 @@ uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
     if (retval == 2 && ((buff[0] << 8) | buff[1]) != 0) {
         uint8_t key_state = buff[0];
         uint8_t key_code = buff[1];
+
+        // The FN button (raw 0xA3) (right shift) not a tracked modifier
+        if (key_code == 0xA3)
+            return -1;
 
 #ifdef DEBUG_KBD
         printf("Raw Key: %x  State: %x, Code: %x \n", (key_code), key_state,
