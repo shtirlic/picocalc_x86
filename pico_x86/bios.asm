@@ -72,8 +72,8 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Revision 0.5', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/10/26', 0, 0, 0xfa
+biosstr db	'PicoCalc x86 BIOS Revision 0.6', 0, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/13/26', 0, 0xfa, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
 
 bios_entry:
@@ -1479,10 +1479,10 @@ int41_max_sect	db 0
 ; ************************* ROM configuration table
 
 rom_config	dw 16		; 16 bytes following
-		db 0xfa		; Model
-		db 'A'		; Submodel
-		db 'C'		; BIOS revision
-		db 0b00100000   ; Feature 1
+        db 0xfa         ; Model (PS/2 Model 25 or 30)
+        db 0x00         ; Submodel (0x00 = Model 30)
+        db 0x00         ; BIOS revision
+        db 0b00110000   ; Feature 1 (Bit 5: RTC, Bit 4: Keyboard Intercept)
 		db 0b00000000   ; Feature 2
 		db 0b00000000   ; Feature 3
 		db 0b00000000   ; Feature 4
