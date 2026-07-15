@@ -124,7 +124,7 @@ For terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.com/pr
  * Git
  * nasm (https://github.com/netwide-assembler/nasm/)
  * Cmake
- * pico-sdk (https://github.com/raspberrypi/pico-sdk) (/usr/share/pico-sdk)
+ * pico-sdk 2.3.0 (https://github.com/raspberrypi/pico-sdk) (/usr/share/pico-sdk)
  * riscv-none-elf gcc (https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack)
 
 ### Optional

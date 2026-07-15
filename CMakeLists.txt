@@ -9,8 +9,8 @@ set(PICO_BOARD pico2)
 set(PICO_PLATFORM rp2350-riscv)
 set(PICO_USE_STACK_GUARDS ON)
 # set(PICO_DEOPTIMIZED_DEBUG ON)
-set(PICO_COMPILER pico_riscv_gcc_zcb_zcmp )
-set(PICO_GCC_TRIPLE "riscv-none-elf")
+set(PICO_TOOLCHAIN_PATH /opt/riscv/)
+set(PICO_COMMON_LANG_FLAGS " -march=rv32ima_zicsr_zifencei_zba_zbb_zbs_zbkb_zca_zcb_zcmp  -mabi=ilp32")
 
 include(/usr/share/pico-sdk/external/pico_sdk_import.cmake)
 
@@ -91,3 +91,5 @@ target_link_libraries(picocalc_x86
 pico_enable_stdio_usb(picocalc_x86 1)
 pico_enable_stdio_uart(picocalc_x86 0)
 pico_add_extra_outputs(picocalc_x86)
+
+pico_add_linker_script_override_path(picocalc_x86 ${CMAKE_CURRENT_LIST_DIR}/linker_scripts FILES default_text_excludes.incl default_rodata_excludes.incl)
