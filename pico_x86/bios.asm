@@ -450,7 +450,7 @@ mem_test_loop:
     call print_new_line
 
     ; POST success one short beep
-    call post_beep
+    call beep
 
 
 boot_disk:
@@ -1528,10 +1528,9 @@ iret
 ; ************ Function call library ************
 
 
-post_beep:
+beep:
     push ax
     push cx
-    push dx
 
     mov al, 0xB6
     out 0x43, al
@@ -1542,7 +1541,6 @@ post_beep:
     out 0x42, al
 
     in  al, 0x61
-    push ax
     or  al, 0x03
     out 0x61, al
 
@@ -1551,10 +1549,9 @@ post_beep:
     nop
     loop .loop
 
-    pop ax
+    xor al, 0x03
     out 0x61, al
 
-    pop dx
     pop cx
     pop ax
     ret
