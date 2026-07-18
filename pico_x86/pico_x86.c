@@ -22,34 +22,57 @@
 #include "pico_x86_video.h"
 #include "pico_x86_serial.h"
 
-uint8_t __aligned(8) mem[RAM_SIZE + 16];
+uint8_t __aligned(4) mem[RAM_SIZE + 16];
 
-uint8_t __aligned(4) __scratch_x("io") io_ports[IO_PORT_COUNT];
-uint8_t bios_table_lookup[20][256];
+uint8_t __aligned(4) __scratch_y("io") io_ports[IO_PORT_COUNT];
+
+typedef struct __attribute__((packed, aligned(4))) {
+    uint8_t xlat_id;
+    uint8_t subfunction;
+    uint8_t flags;
+    uint8_t mod_size;
+} opcode_decode_t;
+
+typedef struct __attribute__((packed, aligned(2))) {
+    uint8_t base_size;
+    uint8_t w_size;
+} inst_size_t;
+
+// Group 1: ModR/M Decode (Tables 0-7) - Indexed by 3-bit i_rm (0-7)
+uint8_t __scratch_y("cpu") rm_decode_table[8][8];
+
+// Group 2: Opcode Decode (Tables 8, 9, 10, 14) - Indexed by 8-bit opcode (0-255)
+opcode_decode_t __scratch_y("cpu") op_decode_table[256];
+
+// Group 3: Instruction Size (Tables 12, 13) - Indexed by 8-bit opcode (0-255)
+inst_size_t __scratch_y("cpu") inst_size_table[256];
+
+// Group 4: Jump Logic (Tables 15-18) - Indexed by 3-bit condition (0-7)
+uint8_t __scratch_y("cpu") jmp_decode_table[4][8];
 
 register uint8_t* opcode_stream asm("s2");
 // register uint8_t* regs8 asm("s3");
 // register uint16_t* regs16 asm("s4");
 
-uint8_t* regs8;
-uint16_t* regs16;
+uint8_t* __scratch_y("cpu") regs8;
+uint16_t* __scratch_y("cpu") regs16;
 
-uint32_t __scratch_x("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
+uint32_t __scratch_y("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
     xlat_opcode_id, extra, rep_mode, rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en;
 
-register uint32_t raw_opcode_id asm("s5");
-register uint32_t seg_override_en asm("s6");
+register uint32_t raw_opcode_id asm("s3");
+register uint32_t seg_override_en asm("s4");
 
-uint32_t __scratch_x("cpu") int8_asap = 0;
+uint32_t __scratch_y("cpu") int8_asap = 0;
 
-uint16_t __scratch_x("cpu") reg_ip, seg_override;
+uint16_t __scratch_y("cpu") reg_ip, seg_override;
 
-uint32_t __scratch_x("cpu") op_source, op_dest, rm_addr, op_to_addr,
+uint32_t __scratch_y("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint, set_flags_type;
-int32_t __scratch_x("cpu") op_result, disk[3], scratch_int;
+int32_t __scratch_y("cpu") op_result, disk[3], scratch_int;
 
-struct timespec __scratch_x() ts;
-struct tm __scratch_x() clock_tm;
+struct timespec __scratch_y() ts;
+struct tm __scratch_y() clock_tm;
 
 // Helper macros
 
@@ -72,10 +95,10 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 #define DECODE_RM_REG                                                                              \
     scratch2_uint = 4 * !i_mod,                                                                    \
     op_to_addr = rm_addr = i_mod < 3                                                               \
-        ? SEGREG(seg_override_en ? seg_override : bios_table_lookup[scratch2_uint + 3][i_rm],      \
-              bios_table_lookup[scratch2_uint][i_rm],                                              \
-              regs16[bios_table_lookup[scratch2_uint + 1][i_rm]]                                   \
-                  + bios_table_lookup[scratch2_uint + 2][i_rm] * i_data1 +)                        \
+        ? SEGREG(seg_override_en ? seg_override : rm_decode_table[scratch2_uint + 3][i_rm],        \
+              rm_decode_table[scratch2_uint][i_rm],                                                \
+              regs16[rm_decode_table[scratch2_uint + 1][i_rm]]                                     \
+                  + rm_decode_table[scratch2_uint + 2][i_rm] * i_data1 +)                          \
         : GET_REG_ADDR(i_rm),                                                                      \
     op_from_addr = GET_REG_ADDR(i_reg),                                                            \
     i_d && (scratch_uint = op_from_addr, op_from_addr = rm_addr, op_to_addr = scratch_uint)
@@ -182,12 +205,13 @@ static void __time_critical_func(set_flags)(int new_flags)
 // distinct functions, which we then execute
 static void __time_critical_func(set_opcode)(uint8_t opcode)
 {
-    xlat_opcode_id = bios_table_lookup[TABLE_XLAT_OPCODE][raw_opcode_id = opcode];
-    extra = bios_table_lookup[TABLE_XLAT_SUBFUNCTION][opcode];
-    i_mod_size = bios_table_lookup[TABLE_I_MOD_SIZE][opcode];
-    set_flags_type = bios_table_lookup[TABLE_STD_FLAGS][opcode];
+    raw_opcode_id = opcode;
+    opcode_decode_t dec = op_decode_table[opcode];
+    xlat_opcode_id = dec.xlat_id;
+    extra = dec.subfunction;
+    set_flags_type = dec.flags;
+    i_mod_size = dec.mod_size;
 }
-
 // Execute INT #interrupt_num on the emulated machine
 static char __time_critical_func(pc_interrupt)(uint8_t interrupt_num)
 {
@@ -250,10 +274,6 @@ static uint32_t sample_instructions = 0;
 #endif
 
 extern psram_spi_inst_t psram_spi;
-
-#define EMS_MAX_HANDLES 16
-#define EMS_MAX_PAGES 128 // 128 pages * 16KB = 2MB PSRAM
-#define EMS_SRAM_ADDRESS 0x6A000
 
 uint8_t ems_phys_alloc[EMS_MAX_PAGES] = { 0 };
 uint8_t ems_phys_handle[EMS_MAX_PAGES] = { 0 };
@@ -376,10 +396,38 @@ void pico_x86_run()
     CAST(uint32_t)
     regs16[REG_AX] = fpd.obj.objsize >> 9;
 
-    // Load instruction decoding helper table
-    for (int i = 0; i < count_of(bios_table_lookup); i++)
-        for (int j = 0; j < 256; j++)
-            bios_table_lookup[i][j] = regs8[regs16[0x81 + i] + j];
+    // Load instruction decoding helper tables
+    for (int i = 0; i < 20; i++) {
+        uint16_t table_addr = regs16[0x81 + i];
+        for (int j = 0; j < 256; j++) {
+            uint8_t val = regs8[table_addr + j];
+
+            // ModR/M tables (0-7): only need 8 entries
+            if (i < 8 && j < 8)
+                rm_decode_table[i][j] = val;
+
+            // Opcode decode (Tables 8, 9, 10, 14)
+            else if (i == TABLE_XLAT_OPCODE)
+                op_decode_table[j].xlat_id = val;
+            else if (i == TABLE_XLAT_SUBFUNCTION)
+                op_decode_table[j].subfunction = val;
+            else if (i == TABLE_STD_FLAGS)
+                op_decode_table[j].flags = val;
+            else if (i == TABLE_I_MOD_SIZE)
+                op_decode_table[j].mod_size = val;
+
+            // Instruction size decode (Tables 12, 13)
+            else if (i == TABLE_BASE_INST_SIZE)
+                inst_size_table[j].base_size = val;
+            else if (i == TABLE_I_W_SIZE)
+                inst_size_table[j].w_size = val;
+
+            // Jump logic tables (15-18): only need 8 entries
+            else if (i >= TABLE_COND_JUMP_DECODE_A && i <= TABLE_COND_JUMP_DECODE_D && j < 8) {
+                jmp_decode_table[i - TABLE_COND_JUMP_DECODE_A][j] = val;
+            }
+        }
+    }
 
     pico_x86_cpu();
 }
@@ -387,7 +435,7 @@ void pico_x86_run()
 void pico_x86_cpu()
 {
     //  GOTO Dispatch Table
-    static const void* __scratch_x("cpu") dispatch_table[49] = { &&OP_0, &&OP_1, &&OP_2, &&OP_3,
+    static const void* __scratch_y("cpu") dispatch_table[49] = { &&OP_0, &&OP_1, &&OP_2, &&OP_3,
         &&OP_4, &&OP_5, &&OP_6, &&OP_7, &&OP_8, &&OP_9, &&OP_10, &&OP_11, &&OP_12, &&OP_13, &&OP_14,
         &&OP_15, &&OP_16, &&OP_17, &&OP_18, &&OP_19, &&OP_20, &&OP_21, &&OP_22, &&OP_23, &&OP_24,
         &&OP_25, &&OP_26, &&OP_27, &&OP_28, &&OP_29, &&OP_30, &&OP_31, &&OP_32, &&OP_33, &&OP_34,
@@ -449,10 +497,10 @@ void pico_x86_cpu()
         scratch_uchar = EXTRACT_BITS(raw_opcode_id, 3, 1);
         reg_ip += (int8_t)i_data0
             * (i_w
-                ^ (regs8[bios_table_lookup[TABLE_COND_JUMP_DECODE_A][scratch_uchar]]
-                    || regs8[bios_table_lookup[TABLE_COND_JUMP_DECODE_B][scratch_uchar]]
-                    || regs8[bios_table_lookup[TABLE_COND_JUMP_DECODE_C][scratch_uchar]]
-                        ^ regs8[bios_table_lookup[TABLE_COND_JUMP_DECODE_D][scratch_uchar]]));
+                ^ (regs8[jmp_decode_table[0][scratch_uchar]]
+                    || regs8[jmp_decode_table[1][scratch_uchar]]
+                    || regs8[jmp_decode_table[2][scratch_uchar]]
+                        ^ regs8[jmp_decode_table[3][scratch_uchar]]));
         NEXT_OP;
     OP_1: // MOV reg, imm
         i_w = EXTRACT_BITS(raw_opcode_id, 3, 3);
@@ -1183,11 +1231,10 @@ void pico_x86_cpu()
 
     next_opcode:
 
-        // Increment instruction pointer by computed instruction length. Tables
-        // in the BIOS binary help us here.
-        reg_ip += (i_mod * (i_mod != 3) + 2 * (!i_mod && i_rm == 6)) * i_mod_size
-            + bios_table_lookup[TABLE_BASE_INST_SIZE][raw_opcode_id]
-            + bios_table_lookup[TABLE_I_W_SIZE][raw_opcode_id] * (i_w + 1);
+        inst_size_t size = inst_size_table[raw_opcode_id];
+
+        reg_ip += (i_mod * (i_mod != 3) + 2 * (!i_mod && i_rm == 6)) * i_mod_size + size.base_size
+            + size.w_size * (i_w + 1);
 
         // If instruction needs to update SF, ZF and PF, set them as appropriate
         if (set_flags_type & FLAGS_UPDATE_SZP) {

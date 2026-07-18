@@ -79,7 +79,7 @@ void __isr(pico_x86_speaker_irq)(void)
     pwm_set_chan_level(pwm_gpio_to_slice_num(AUDIO_PIN_R), PWM_CHAN_B, level);
 }
 
-void __time_critical_func(second_core)(void)
+void(second_core)(void)
 {
     add_repeating_timer_us(-54925, xt_timer_callback, NULL, &xt_timer);
 

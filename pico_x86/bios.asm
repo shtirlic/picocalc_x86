@@ -1872,7 +1872,7 @@ lpt3addr	dw	0
 lpt4addr	dw	0
 equip		dw	0b0000001000100001
 		    db	0
-memsize		dw	0x198 ; 40:0013
+memsize		dw	0x1a8 ; 40:0013
 		    dw	0
 keyflags	dw	0
 		    db	0
