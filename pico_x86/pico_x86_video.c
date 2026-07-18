@@ -261,9 +261,10 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
 
             if (is_1bpp_mode) {
                 for (int p = 0; p < 4; p++) {
-                    uint8_t bit = (pixel_data >> (7 - p * 2)) & 1;
+                    uint8_t hi = (pixel_data >> (7 - p * 2)) & 1;
+                    uint8_t lo = (pixel_data >> (6 - p * 2)) & 1;
+                    uint8_t bit = hi | lo;
                     uint16_t color = bit ? m6_fg_color : m6_bg_color;
-
                     put_color(color);
                 }
                 continue;

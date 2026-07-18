@@ -395,8 +395,10 @@ int10_set_page:
 	pop	ds
 	iret
 
-
-
+  ; AL    number of lines to scroll in (0=blank entire rectangle)
+  ; BH    video attribute to be used on blank line(s)
+  ; CH,CL row,clm of lower-right corner of rectangle to scroll/blank
+  ; DH,DL row,clm of upper-left corner of rectangle to scroll/blank
   int10_scrollup:
 	cmp	al, 0 ; Clear window
 	jne	cls_partial
@@ -589,7 +591,10 @@ cls_vmem_scroll_up_one:
 	pop	bx
 	iret
 
-
+  ; AL    number of lines to scroll in (0=blank entire rectangle)
+  ; BH    video attribute to be used on blank line(s)
+  ; CH,CL row,clm of lower-right corner of rectangle to scroll/blank
+  ; DH,DL row,clm of upper-left corner of rectangle to scroll/blank
   int10_scrolldown:
 
 	cmp	al, 0 ; Clear window
@@ -1362,10 +1367,9 @@ int10_features:
 
 
 ; Clear screen
-
+; BH in attribute
 clear_screen:
 	push	ax
-	push	bx
 	push	cx
 	push	es
 	push	di
@@ -1377,20 +1381,31 @@ clear_screen:
 	mov	byte [es:curpos_y-bios_data], 0
 	mov	byte [es:crt_curpos_y-bios_data], 0
 
-	push	es
-	cld
-	mov	ax, 0xb800
-	mov	es, ax
-	mov	di, 0
+	mov	ah, bh      ; Keep the attribute from BH
+
+	mov	al, [es:vidmode-bios_data]
+	cmp	al, 4
+	jae	.gfx_clear
+
+.text_clear:
 	mov	al, 0x20
-	mov	ah, bh
+	jmp	.do_clear
+
+.gfx_clear:
+	mov	al, 0x00
+
+.do_clear:
+    push bx
+	cld
+	mov	bx, 0xb800
+	mov	es, bx
+	mov	di, 0
 	mov	cx, 8192
 	rep	stosw
-	pop	es
+	pop	bx
 
 	pop	di
 	pop	es
 	pop	cx
-	pop	bx
 	pop	ax
 	ret
