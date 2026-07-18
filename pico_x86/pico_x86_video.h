@@ -75,6 +75,8 @@ typedef struct {
     // 11H - 640x480 graphics (MCGA only)               00011000b (18H)
 
     // CGA Mode Control (Port 0x3D8) 40:0065
+    bool mcr_display_reset; // bit 7 display reset / custom
+
     bool mcr_blink_enabled; // bit 5 blinking attribute
     bool mcr_hires_graphics_mode; // bit 4 true if 640-wide graphics modes/ false  all other
     bool mcr_video_output; // bit 3 true video enabled / false screen blank
@@ -166,5 +168,9 @@ void video_cga_port_out(uint32_t port);
 
 typedef void (*video_put_color_cb)(uint16_t color);
 
+typedef void (*video_display_reset_cb)();
+
 void video_cga_render(video_put_color_cb put_color);
 void video_cga_set_resolution(uint16_t width, uint16_t height);
+
+void __time_critical_func(video_display_reset)(video_display_reset_cb reset_cb);

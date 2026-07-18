@@ -98,6 +98,8 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
     // 6, 7 bits unused
     else if (port == 0x3D8) {
         uint8_t port_value = io_ports[0x3D8];
+
+        crtc.mcr_display_reset |= ((port_value & 0x80) != 0); // bit 7
         crtc.mcr_blink_enabled = (port_value & 0x20) != 0; // bit 5
         crtc.mcr_hires_graphics_mode = (port_value & 0x10) != 0; // 4
         crtc.mcr_video_output = (port_value & 0x8) != 0; // 3
@@ -105,7 +107,7 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
         crtc.mcr_graphics_mode = (port_value & 0x2) != 0; // 1
         crtc.mcr_hires = (port_value & 0x1) != 0; // 0
 
-        crtc.mcr_register = port_value;
+        crtc.mcr_register = port_value & ~0x80;
         // printf("BDA: 0x449 %x, 0x465 %x \n", mem[0x449], mem[0x465]);
         // printf("mcr_register status: %x enabled by software at CS:IP %04X:%04X\n",
         //     crtc.mcr_register, regs16[REG_CS], reg_ip);
@@ -294,9 +296,17 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
     }
 }
 
+void __always_inline video_display_reset(video_display_reset_cb reset_cb)
+{
+    if (crtc.mcr_display_reset) {
+        reset_cb();
+        crtc.mcr_display_reset = false;
+    }
+}
+
 void __time_critical_func(video_cga_render)(video_put_color_cb put_color)
 {
-    if (!crtc.mcr_video_output) {
+    if (!crtc.mcr_video_output || crtc.mcr_display_reset) {
         // maybe draw black screen?
         return;
     }

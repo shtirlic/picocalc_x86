@@ -178,7 +178,7 @@ static char __time_critical_func(set_AF_OF_arith)()
 }
 
 // Assemble and return emulated CPU FLAGS register in scratch_uint
-static void __time_critical_func(make_flags)()
+static void __always_inline(make_flags)()
 {
     // 8086 has reserved and unused flags set to 1
     scratch_uint = 0xF002 | (regs8[FLAG_CF] << 0) | (regs8[FLAG_PF] << 2) | (regs8[FLAG_AF] << 4)

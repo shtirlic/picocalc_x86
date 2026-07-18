@@ -163,6 +163,9 @@ static void __always_inline lcd_set_window(
 
 static void lcd_init(const uint8_t* init_seq)
 {
+    gpio_put(TFT_CS_PIN, 1);
+    gpio_put(TFT_RST_PIN, 1);
+
     while (*init_seq) {
         lcd_write_cmd(init_seq + 2, *init_seq);
         sleep_ms(init_seq[1] * 5);
@@ -204,8 +207,6 @@ void picocalc_display_init()
     gpio_set_dir(TFT_RST_PIN, GPIO_OUT);
     gpio_set_dir(TFT_LED_PIN, GPIO_OUT);
 
-    gpio_put(TFT_CS_PIN, 1);
-    gpio_put(TFT_RST_PIN, 1);
     lcd_init(init_seq);
 
     lcd_set_window(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -221,6 +222,7 @@ void picocalc_display_show_image(const uint8_t* image, size_t size)
 }
 
 void __time_critical_func(picocalc_display_begin_frame)() { start_pixels(); }
+void __time_critical_func(picocalc_display_reset)() { lcd_init(init_seq); }
 
 void __time_critical_func(picocalc_display_put_color)(uint16_t color)
 {

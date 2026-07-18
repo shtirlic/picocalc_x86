@@ -102,6 +102,7 @@ void(second_core)(void)
             // uint8_t video_mode = mem[MAP_ADDR(0x449)];
             // printf("Video mode: %d \n", video_mode);
 
+            video_display_reset(picocalc_display_reset);
             picocalc_display_begin_frame();
             video_cga_render(picocalc_display_put_color);
             video_frames++;

@@ -28,6 +28,7 @@
 #endif
 
 void picocalc_display_init();
+void picocalc_display_reset();
 void picocalc_display_begin_frame();
 void picocalc_display_put_color(uint16_t color);
 void picocalc_display_show_image(const uint8_t* image, size_t size);

@@ -263,11 +263,12 @@ boot:	mov	ax, 0
 	mov	cx, 0x100
 	rep	movsb
 
-
    ; Reset and Intital setup needed for startup and soft reboot
    ; Set Mode 3 and needed values for CGA registers
-	mov	dx, 0x3d8
-	mov	al, 0x29	; CGA Mode Control
+	mov	dx, 0x3d8   ; CGA Mode Control
+	mov	al, 0x80	; Display reset custom
+	out	dx, al
+    mov	al, 0x29	; Default text mode 3
 	out	dx, al
     mov	[es:0x65], al
 
