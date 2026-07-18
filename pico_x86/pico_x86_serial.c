@@ -149,20 +149,38 @@ void __time_critical_func(serial_port_out)(uint16_t port)
             com1_dlm = val;
             com1_apply_config();
         } else {
-            com1_ier = val; // Stored for readback; no interrupt model here
+            uint8_t old_ier = com1_ier;
+            com1_ier = val;
+            if (!(old_ier & 0x01) && (val & 0x01))
+                com1_rx_irq_pending = false;
         }
         break;
     case 0x3FA: // FCR
         if ((val & 0x01) != (com1_fcr & 0x01))
             uart_set_fifo_enabled(SERIAL_UART_ID, val & 0x01);
+        if (val & 0x02) { // Clear RX FIFO
+            while (uart_is_readable(SERIAL_UART_ID))
+                (void)uart_get_hw(SERIAL_UART_ID)->dr;
+            com1_lsr_err_latch = 0;
+            com1_rx_irq_pending = false;
+        }
+        // Bit 2: Clear TX FIFO
+        if (val & 0x04) {
+            uart_get_hw(SERIAL_UART_ID)->cr &= ~UART_UARTCR_UARTEN_BITS;
+            uart_get_hw(SERIAL_UART_ID)->cr |= UART_UARTCR_UARTEN_BITS;
+        }
         com1_fcr = val;
         break;
     case 0x3FB: // LCR
         com1_lcr = val;
         com1_apply_config();
         break;
-    case 0x3FC: // MCR -- RTS/DTR/OUT1/OUT2/loopback bits; not wired
+    case 0x3FC: // MCR -- RTS/DTR/OUT1/OUT2/loopback bits
         com1_mcr = val;
+        if (val & 0x10) // Loopback: wire PL011's LBE so self-tests pass
+            hw_set_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
+        else
+            hw_clear_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
         if (!(val & 0x08))
             com1_rx_irq_pending = false; // OUT2 cleared: force re-arm on next enable
         break;
