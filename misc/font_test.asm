@@ -12,7 +12,7 @@ start:
     xor di, di
 
     mov cx, 256
-    mov al, 0           .
+    mov al, 0
     mov ah, 07h
 
 print_loop:

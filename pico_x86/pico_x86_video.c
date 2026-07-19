@@ -14,8 +14,8 @@ extern uint8_t io_ports[];
 // extern uint16_t reg_ip;
 
 CRTC_State __scratch_y("video") crtc = { };
-static uint16_t __scratch_y("video") screen_width = 320;
-static uint16_t __scratch_y("video") screen_height = 320;
+static uint16_t __scratch_y("video") screen_width;
+static uint16_t __scratch_y("video") screen_height;
 static uint8_t* __scratch_y("video") vram = NULL;
 
 void __time_critical_func(video_cga_port_in)(uint32_t port)
@@ -304,7 +304,7 @@ void __always_inline video_display_reset(video_display_reset_cb reset_cb)
     }
 }
 
-void __time_critical_func(video_cga_render)(video_put_color_cb put_color)
+void __always_inline video_cga_render(video_put_color_cb put_color)
 {
     if (!crtc.mcr_video_output || crtc.mcr_display_reset) {
         // maybe draw black screen?

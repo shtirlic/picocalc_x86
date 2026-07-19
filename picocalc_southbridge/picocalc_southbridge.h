@@ -4,8 +4,6 @@
 #pragma once
 
 #include <pico/stdlib.h>
-#include <pico/platform.h>
-#include <hardware/gpio.h>
 #include <hardware/i2c.h>
 
 // SouthBridge I2C Params

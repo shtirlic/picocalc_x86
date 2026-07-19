@@ -8,7 +8,6 @@
  * Licensed under GPLv3 for the combined work.
  */
 
-#include <stdio.h>
 #include <math.h>
 
 #include "pico/stdlib.h"
@@ -18,14 +17,6 @@
 #include "picocalc_display.h"
 #include "picocalc_display.pio.h"
 
-#ifndef SCREEN_WIDTH
-#define SCREEN_WIDTH 320
-#endif
-
-#ifndef SCREEN_HEIGHT
-#define SCREEN_HEIGHT 320
-#endif
-
 #define SERIAL_CLK_DIV 1.92f
 #define MADCTL_BGR_PIXEL_ORDER (1 << 3)
 #define MADCTL_ROW_COLUMN_EXCHANGE (1 << 5)
@@ -34,7 +25,7 @@
 static uint sm_video_output = 0;
 static PIO pio = pio0;
 
-static const uint8_t init_seq[] = {
+static constexpr uint8_t init_seq[] = {
 
     // Software reset
     1, 20, 0x01,
@@ -123,9 +114,6 @@ static void __always_inline lcd_set_dc_cs(const bool dc, const bool cs)
 
 static void __always_inline lcd_write_cmd(const uint8_t* cmd, size_t count)
 {
-    if (*cmd != 0x2c) {
-        //     printf("\n LCD: 0x%02X => ", *cmd);
-    }
     picocalc_display_wait_idle(pio, sm_video_output);
     lcd_set_dc_cs(0, 0);
     picocalc_display_put(pio, sm_video_output, *cmd++);
@@ -161,29 +149,29 @@ static void __always_inline lcd_set_window(
     lcd_write_cmd(screen_height_cmd, 5);
 }
 
-static void lcd_init(const uint8_t* init_seq)
+static void lcd_init(const uint8_t* seq)
 {
     gpio_put(TFT_CS_PIN, 1);
     gpio_put(TFT_RST_PIN, 1);
 
-    while (*init_seq) {
-        lcd_write_cmd(init_seq + 2, *init_seq);
-        sleep_ms(init_seq[1] * 5);
-        init_seq += *init_seq + 2;
+    while (*seq) {
+        lcd_write_cmd(seq + 2, *seq);
+        sleep_ms(seq[1] * 5);
+        seq += *seq + 2;
     }
 }
 
 static void __always_inline start_pixels()
 {
-    const uint8_t cmd = 0x2c; // RAMWR
+    constexpr uint8_t cmd = 0x2c; // RAMWR
     lcd_write_cmd(&cmd, 1);
     lcd_set_dc_cs(1, 0);
 }
 
-static void test_pattern()
+[[maybe_unused]] static void test_pattern()
 {
     start_pixels();
-    for (int i = 0; i < 320 * 320; i++) {
+    for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++) {
         picocalc_display_put(pio, sm_video_output, 0x00);
         picocalc_display_put(pio, sm_video_output, 0x1F);
     }

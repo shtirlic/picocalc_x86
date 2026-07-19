@@ -163,8 +163,8 @@ static const uint16_t cga_palette[24] = {
     0x0000, 0x07FF, 0xF800, 0xFFFF // Palette 2: L. Cyan, L. Red, White
 };
 
-void video_cga_port_in(uint32_t port);
-void video_cga_port_out(uint32_t port);
+void __time_critical_func(video_cga_port_in)(uint32_t port);
+void __time_critical_func(video_cga_port_out)(uint32_t port);
 
 typedef void (*video_put_color_cb)(uint16_t color);
 
@@ -173,4 +173,4 @@ typedef void (*video_display_reset_cb)();
 void video_cga_render(video_put_color_cb put_color);
 void video_cga_set_resolution(uint16_t width, uint16_t height);
 
-void __time_critical_func(video_display_reset)(video_display_reset_cb reset_cb);
+void video_display_reset(video_display_reset_cb reset_cb);

@@ -5,10 +5,12 @@
 #include <string.h>
 #include "hardware/gpio.h"
 #include "hardware/structs/bus_ctrl.h"
+#include "hardware/pwm.h"
 #include "pico/stdlib.h"
 #include <pico/multicore.h>
 #include "pico/aon_timer.h"
 #include "pico/util/datetime.h"
+
 #include "psram_spi.h"
 #include "tf_card.h"
 #include "ff.h"
@@ -27,21 +29,17 @@ extern uint8_t mem[];
 extern uint8_t io_ports[];
 extern uint32_t int8_asap;
 
-uint32_t video_frames;
-float target_fps = 60.0f;
-uint64_t tick;
-uint64_t last_frame_tick;
+static uint32_t video_frames;
+static float target_fps = 60.0f;
 
-FATFS fs;
+static FATFS fs;
 
 #define PIT_BASE_HZ 1193182UL
-uint16_t wave_counter;
-extern uint32_t pwm_sample_hz;
 #define SPKR_AMPLITUDE 180 // headroom under wrap=250;
 
+static uint16_t wave_counter;
 static uint8_t speaker_high = 0; // current output state
-
-struct repeating_timer xt_timer;
+static struct repeating_timer xt_timer;
 
 // ISR every ~54.9ms (18.2Hz)
 static bool __always_inline xt_timer_callback(struct repeating_timer* t)
@@ -50,7 +48,7 @@ static bool __always_inline xt_timer_callback(struct repeating_timer* t)
     return true;
 }
 
-void __isr(pico_x86_speaker_irq)(void)
+static void __isr(pico_x86_speaker_irq)()
 {
     pwm_clear_irq(pwm_gpio_to_slice_num(AUDIO_PIN_L));
     pwm_clear_irq(pwm_gpio_to_slice_num(AUDIO_PIN_R));
@@ -79,20 +77,22 @@ void __isr(pico_x86_speaker_irq)(void)
     pwm_set_chan_level(pwm_gpio_to_slice_num(AUDIO_PIN_R), PWM_CHAN_B, level);
 }
 
-void(second_core)(void)
+static void(second_core)()
 {
+    const uint64_t frame_duration_us = 1000000ULL / target_fps;
+
     add_repeating_timer_us(-54925, xt_timer_callback, NULL, &xt_timer);
 
-    tick = time_us_64();
-    last_frame_tick = tick;
+    uint64_t last_frame_tick = time_us_64();
 
-    video_cga_set_resolution(320, 320);
+    video_cga_set_resolution(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     picocalc_display_show_image(image_data_splash, sizeof(image_data_splash));
     sleep_ms(1000);
 
     while (1) {
-        if (tick >= last_frame_tick + (1000000 / target_fps)) {
+        const uint64_t current_tick = time_us_64();
+        if (current_tick - last_frame_tick >= frame_duration_us) {
             //       printf("Refresh LCD\n");
             //       mem[0x44E] = 0;
             // uint16_t crtc_offset = mem[MAP_ADDR(0x4AC)] | (mem[MAP_ADDR(0x4AD)] << 8);
@@ -106,16 +106,15 @@ void(second_core)(void)
             picocalc_display_begin_frame();
             video_cga_render(picocalc_display_put_color);
             video_frames++;
-            last_frame_tick = tick;
+            last_frame_tick += frame_duration_us;
         }
         //     busy_wait_ms(1000);
-        tick = time_us_64();
         tight_loop_contents();
     }
     __unreachable();
 }
 
-void loop()
+static void loop()
 {
     while (1) {
         pico_x86_run();
@@ -124,21 +123,21 @@ void loop()
     __unreachable();
 }
 
-void init_sound()
+static void init_sound()
 {
     printf("%s", "\n▼ Sound Init...");
     picocalc_sound_init(pico_x86_speaker_irq);
     printf("%s", "done\n");
 }
 
-void init_sothbridge()
+static void init_sothbridge()
 {
     printf("%s", "\n▼ Southbridge Init...");
     picocalc_southbridge_init();
     printf("%s", "done\n");
 }
 
-void init_display()
+static void init_display()
 {
     printf("%s", "\n▼ Display Init...");
 
@@ -148,7 +147,7 @@ void init_display()
     printf("%s", "done\n");
 }
 
-void init_ram()
+static void init_ram()
 {
     printf("%s", "▼ PSRAM Init...");
     // psram_spi = psram_qpi_init(pio1, -1);
@@ -164,14 +163,13 @@ void init_ram()
     // }
 }
 
-void init_fs()
+static void init_fs()
 {
     printf("%s", "▼ SD Card Init...");
 
     FATFS* lfs;
 
     FIL fil;
-    FRESULT fr;
     DIR dp;
     pico_fatfs_spi_config_t config = {
         spi0, // if unmatched SPI pin assignments with spi0/spi1 or explicitly
@@ -183,19 +181,19 @@ void init_fs()
         19, // SPIx_TX
         true // use internal pullup
     };
-    DWORD fre_clust, fre_sect, tot_sect;
+    DWORD fre_clust;
     bool spi_configured = pico_fatfs_set_config(&config);
 
-    fr = f_mount(&fs, "0:", 1);
+    FRESULT fr = f_mount(&fs, "0:", 1);
     fr = f_getfree("0:", &fre_clust, &lfs);
-    tot_sect = (lfs->n_fatent - 2) * lfs->csize;
-    fre_sect = fre_clust * lfs->csize;
+    const DWORD tot_sect = (lfs->n_fatent - 2) * lfs->csize;
+    const DWORD fre_sect = fre_clust * lfs->csize;
     printf("%s", "done\n");
     printf("▼ %10lu KiB total drive space.\n▼ %10lu KiB available.\n", tot_sect / 2, fre_sect / 2);
     // f_unmount("");                 /* Unmount the default drive */
 }
 
-void init()
+static void init()
 {
     set_sys_clock_khz(230000, true);
     // set_sys_clock_khz(150000, true);

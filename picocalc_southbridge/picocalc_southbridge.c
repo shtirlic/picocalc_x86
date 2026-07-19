@@ -131,7 +131,6 @@ void picocalc_southbridge_init()
 
 int picocalc_southbridge_battery()
 {
-    int retval;
     uint16_t buff = 0;
     unsigned char msg[2];
     msg[0] = SB_REG_BAT;
@@ -139,7 +138,7 @@ int picocalc_southbridge_battery()
     if (sb_initialized == 0)
         return -1;
 
-    retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
+    int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("read_battery i2c write error\n");
         return -1;
@@ -159,7 +158,6 @@ int picocalc_southbridge_battery()
 
 int picocalc_southbridge_backlight(uint8_t val)
 {
-    int retval;
     uint16_t buff = 0;
     unsigned char msg[2];
     msg[0] = SB_REG_BK2;
@@ -169,7 +167,7 @@ int picocalc_southbridge_backlight(uint8_t val)
     if (sb_initialized == 0)
         return -1;
 
-    retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 2, false, SB_I2C_TIMEOUT_US);
+    int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 2, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("read_battery i2c write error\n");
         return -1;

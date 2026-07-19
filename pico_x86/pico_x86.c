@@ -50,18 +50,15 @@ inst_size_t __scratch_y("cpu") inst_size_table[256];
 // Group 4: Jump Logic (Tables 15-18) - Indexed by 3-bit condition (0-7)
 uint8_t __scratch_y("cpu") jmp_decode_table[4][8];
 
-register uint8_t* opcode_stream asm("s2");
-// register uint8_t* regs8 asm("s3");
-// register uint16_t* regs16 asm("s4");
+static uint8_t* opcode_stream asm("s5");
+static uint32_t raw_opcode_id asm("s6");
+static uint32_t seg_override_en asm("s7");
 
 uint8_t* __scratch_y("cpu") regs8;
 uint16_t* __scratch_y("cpu") regs16;
 
 uint32_t __scratch_y("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
     xlat_opcode_id, extra, rep_mode, rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en;
-
-register uint32_t raw_opcode_id asm("s3");
-register uint32_t seg_override_en asm("s4");
 
 uint32_t __scratch_y("cpu") int8_asap = 0;
 
@@ -105,7 +102,7 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 
 // Returns number of top bit in operand (i.e. 8 for 8-bit operands, 16 for
 // 16-bit operands)
-#define TOP_BIT 8 * (i_w + 1)
+#define TOP_BIT (8 * (i_w + 1))
 
 // Jump helper for direct threading
 #define NEXT_OP goto next_opcode
@@ -117,13 +114,13 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
         = (op_result = CAST(op_data_type) mem[rm_addr] * (op_data_type) * out_regs) >> 16,         \
         regs16[REG_AX] = op_result, set_OF(set_CF(op_result - (op_data_type)op_result)))
 #define DIV_MACRO(out_data_type, in_data_type, out_regs)                                           \
-    (scratch_int = CAST(out_data_type) mem[rm_addr])                                               \
-            && !(scratch2_uint                                                                     \
-                = (in_data_type)(scratch_uint = (out_regs[i_w + 1] << 16) + regs16[REG_AX])        \
-                    / scratch_int,                                                                 \
-                scratch2_uint - (out_data_type)scratch2_uint)                                      \
-        ? out_regs[i_w + 1] = scratch_uint - scratch_int * (*out_regs = scratch2_uint)             \
-        : pc_interrupt(0)
+    ((scratch_int = CAST(out_data_type) mem[rm_addr])                                              \
+                && !(scratch2_uint                                                                 \
+                    = (in_data_type)(scratch_uint = (out_regs[i_w + 1] << 16) + regs16[REG_AX])    \
+                        / scratch_int,                                                             \
+                    scratch2_uint - (out_data_type)scratch2_uint)                                  \
+            ? out_regs[i_w + 1] = scratch_uint - scratch_int * (*out_regs = scratch2_uint)         \
+            : pc_interrupt(0))
 #define DAA_DAS(op1, op2, mask, min)                                                               \
     set_AF((((scratch2_uint = regs8[REG_AL]) & 0x0F) > 9) || regs8[FLAG_AF])                       \
         && (op_result = regs8[REG_AL] op1 6,                                                       \
@@ -168,7 +165,7 @@ static char __always_inline set_AF(int new_AF) { return regs8[FLAG_AF] = !!new_A
 static char __always_inline set_OF(int new_OF) { return regs8[FLAG_OF] = !!new_OF; }
 
 // Set auxiliary and overflow flag after arithmetic operations
-static char __time_critical_func(set_AF_OF_arith)()
+static char __always_inline set_AF_OF_arith()
 {
     set_AF((op_source ^= op_dest ^ op_result) & 0x10);
     if (op_result == op_dest)
@@ -203,7 +200,7 @@ static void __time_critical_func(set_flags)(int new_flags)
 // Convert raw opcode to translated opcode index. This condenses a large number
 // of different encodings of similar instructions into a much smaller number of
 // distinct functions, which we then execute
-static void __time_critical_func(set_opcode)(uint8_t opcode)
+static void __always_inline set_opcode(uint8_t opcode)
 {
     raw_opcode_id = opcode;
     opcode_decode_t dec = op_decode_table[opcode];
@@ -239,7 +236,7 @@ static int __always_inline AAA_AAS(char which_operation)
 }
 
 // PicoCalc specific keyboard handling
-static void __time_critical_func(keyboard_process)()
+static void __always_inline keyboard_process()
 {
     int kbd_event = picocalc_southbridge_kb_read();
     if (unlikely(kbd_event != -1)) {
@@ -443,7 +440,7 @@ void pico_x86_cpu()
         &&OP_45, &&OP_46, &&OP_47, &&OP_48 };
 
     // Instruction execution loop. Terminates if CS:IP = 0:0
-    for (; opcode_stream = mem + MAP_ADDR(16 * regs16[REG_CS] + reg_ip), opcode_stream != mem;) {
+    while (opcode_stream = mem + MAP_ADDR(16 * regs16[REG_CS] + reg_ip), opcode_stream != mem) {
 
         set_opcode(*opcode_stream);
 
@@ -528,7 +525,7 @@ void pico_x86_cpu()
             i_reg - 3 || R_M_PUSH(regs16[REG_CS]),
                 i_reg & 2
                 && R_M_PUSH(reg_ip + 2 + i_mod * (i_mod != 3) + 2 * (!i_mod && i_rm == 6)),
-                i_reg & 1 && (regs16[REG_CS] = CAST(int16_t) mem[op_from_addr + 2]),
+                i_reg & 1 && ((regs16[REG_CS] = CAST(int16_t) mem[op_from_addr + 2])),
                 R_M_OP(reg_ip, =, mem[op_from_addr]), set_opcode(0x9A);
         } else {
             R_M_PUSH(mem[rm_addr]);
@@ -620,7 +617,7 @@ void pico_x86_cpu()
         }
         NEXT_OP;
     OP_10: // MOV sreg, r/m | POP r/m | LEA reg, r/m
-        if (likely(!i_w)) {
+        if ((!i_w)) {
             i_w = 1;
             i_reg += 8;
             DECODE_RM_REG;
@@ -767,7 +764,7 @@ void pico_x86_cpu()
         NEXT_OP;
     OP_18: // CMPSx|SCASx
         scratch2_uint = seg_override_en ? seg_override : REG_DS;
-        if (likely(scratch_uint = rep_override_en ? regs16[REG_CX] : 1)) {
+        if (likely((scratch_uint = rep_override_en ? regs16[REG_CX] : 1))) {
             for (; scratch_uint; rep_override_en || scratch_uint--) {
                 MEM_OP(extra ? REGS_BASE : SEGREG(scratch2_uint, REG_SI, ), -,
                     SEGREG(REG_ES, REG_DI, ));
@@ -1287,6 +1284,4 @@ void pico_x86_cpu()
 
     printf("\n!!! EMULATOR EXITED MAIN LOOP !!!\n");
     printf("Final CPU State -> CS: %04X | IP: %04X\n\n", regs16[REG_CS], reg_ip);
-
-    return;
 }

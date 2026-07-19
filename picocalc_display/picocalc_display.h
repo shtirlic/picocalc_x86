@@ -27,8 +27,16 @@
 #define TFT_DC_PIN 14
 #endif
 
+#ifndef SCREEN_WIDTH
+#define SCREEN_WIDTH 320
+#endif
+
+#ifndef SCREEN_HEIGHT
+#define SCREEN_HEIGHT 320
+#endif
+
 void picocalc_display_init();
-void picocalc_display_reset();
-void picocalc_display_begin_frame();
-void picocalc_display_put_color(uint16_t color);
+void __time_critical_func(picocalc_display_reset)();
+void __time_critical_func(picocalc_display_begin_frame)();
+void __time_critical_func(picocalc_display_put_color)(uint16_t color);
 void picocalc_display_show_image(const uint8_t* image, size_t size);

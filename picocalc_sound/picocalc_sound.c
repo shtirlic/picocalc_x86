@@ -4,6 +4,7 @@
 #include <math.h>
 #include "picocalc_sound.h"
 #include "hardware/clocks.h"
+#include "hardware/pwm.h"
 
 uint32_t pwm_sample_hz;
 
@@ -12,8 +13,8 @@ void picocalc_sound_init(irq_handler_t my_handler)
     gpio_set_function(AUDIO_PIN_L, GPIO_FUNC_PWM);
     gpio_set_function(AUDIO_PIN_R, GPIO_FUNC_PWM);
 
-    int slice_l = pwm_gpio_to_slice_num(AUDIO_PIN_L);
-    int slice_r = pwm_gpio_to_slice_num(AUDIO_PIN_R);
+    const int slice_l = pwm_gpio_to_slice_num(AUDIO_PIN_L);
+    const int slice_r = pwm_gpio_to_slice_num(AUDIO_PIN_R);
 
     pwm_clear_irq(slice_l);
     pwm_clear_irq(slice_r);
