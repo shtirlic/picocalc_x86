@@ -18,27 +18,34 @@ If someone wants to run on ARM cores it would be very easy to adapt it.
 
 ## Specs
 
-### Video
-CGA video adpater
+### RAM
+In stock config:
+* available conventional **RAM is 442368(0x6C000) bytes, or 432 KB**
+* 16 KB video ram for CGA
+* 16 KB for BIOS and internal usage
 
-   * text modes 80x25 and 40x25 (Passing all text from `CGA_COMP` except 8x8 font display text WIP)
-   * grahic modes 4 and 6 (issues with text output during grahics WIP)
+### Performance
+It's around ~1 MIPS, so it's like overpowered IBM PC XT or PS/2 model 30.
+
+### Video and Display
+CGA video adapter
+
+   * text modes 80x25 and 40x25 (Passing all CGA text test from `CGA_COMP` utility).
+   * graphic modes 4 and 6 (issues with text output during graphics WIP, some tests not passed).
+   * 4x10 Font is used to support 80x25 default text mode.
+   * Margins on the top and bottom of the screen to correct aspect ratio. 
 
 ### Sound
-   * PC Speaker
+   * PC Speaker supported.
 
 ### Serial
    * Pico UART0 connected as COM1, BIOS interrupts(up to 9600) and direct mode working up to 57600 (tested with https://github.com/go4retro/tcpser for accessing telnet BBS via modem emulation on host PC).
-   * XON/XOFF software flow control method must be used
+   * XON/XOFF software flow control method must be used.
 
-### RAM
-In stock config:
-* available conventional **RAM is 417792(0x66000) bytes, or 408 KB**
-* 16 KB video ram for CGA
-* 16 KB for BIOS
+### Keyboard
+   * Keyboard works with hotkeys available like ALT+F1, CTRL+G etc.
+   * Short press on PicoCalc Power button doing warm reboot if latest south bridge firmware flashed.  
 
-### Performance
-It's around ~1 MIPS, so like IMB PC AT or overpowered XT or PS/2 model 30.
 
 ## Getting Started
 
@@ -62,7 +69,7 @@ mount new disk in `dosbox`, usage of `mount` or `imgmount` command depends on yo
 mount c hd.img -t hdd -fs none -size 512,63,8,1024
 ```
 
-* Use `fdisk` to create partion table and make it bootable.
+* Use `fdisk` to create partition table and make it bootable.
 * Install the operating system.
 
 Then you can mount your `hd.img` and transfer files in `dosbox` via:
@@ -76,8 +83,11 @@ mount c hd.img -t hdd -fs fat -size 512,63,8,1024
 
 * Transfer to SD card to `/x86/hd.img` location.
 
-### Serial / Modem / File Transfers
+### Floppy
 
+Floppy supported as image `/x86/fd.img` if not present in startup time, blank floppy image wil be created.
+
+### Serial / Modem / File Transfers
 
 #### File Transfers
 
@@ -114,7 +124,7 @@ Explanation of modem init command `"s0=1&k4e1"`:
 echo modem commands. Also adds speed dial for `123` number, so in terminal you could dial via `ATDT123` and then connect via emultion/proxy to the telnet `amnesiabbs.duckdns.org`
 The current BBS list can be found here https://www.telnetbbsguide.com
 
-For terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.com/product/qmodem/45 or better alternative.
+For the terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.com/product/qmodem/45 or better alternative.
 
 
 ## Building
@@ -143,17 +153,20 @@ git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
  * [ ] Fix CGA text output in graphics mode for mode 4 and mode 6
  * [ ] Add good 8x8 font for 40 column text mode
  * [ ] Make screenshot function (hotkey) via saving on SD Card
- * [ ] Support PSRAM connected via QMI like Pimoroni Pico 2 (map memory to 640kb)
+ * [ ] Support boards with soldered PSRAM connected via QMI like Pimoroni Pico 2 Plus (map memory up to 736kb)
  * [ ] EMS 3.2 full testing and XMS on top of it
- * [x] UART passthrough to host PC as COM1 (modem etc)
+ * [x] UART passthrough to host PC as COM1 (modem etc.)
  * [ ] Pico 2 W some network emulation
+ * [ ] CDC ACM NCM support
  * [ ] Pico 2 LED support
- * [ ] Support ctrl+f1 or alt+f1 and other keystrokes
+ * [x] Support ctrl+f1 or alt+f1 and other keystrokes
  * [ ] MCGA? mode 13h 320x200 256-color mode via PSRAM
  * [ ] More hardware devices emulation
- * [ ] Add floppy support via fd.img
+ * [x] Add floppy support via fd.img
  * [ ] BIOS boot menu
  * [ ] Better emulation for disk subsystems
  * [ ] Enable bios override from SD card
  * [ ] Support backlights and power resets via https://git.jcsmith.fr/jackcartersmith/picocalc_BIOS
+ * [ ] Power management / battery reporting
  * [ ] Pass all test for CGA comp https://github.com/MobyGamer/CGACompatibilityTester
+ * [ ] Battery / performance and status overlay at the top of the screen, shortcut helpers at the bottom 
