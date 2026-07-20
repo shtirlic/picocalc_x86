@@ -1965,11 +1965,11 @@ lpt1addr	dw	0
 lpt2addr	dw	0
 lpt3addr	dw	0
 lpt4addr	dw	0
-equip		dw	0b0000001000100001
+equip		dw	0b0000001000100001 ; 40:0010
 		    db	0
 memsize		dw	0x1a8 ; 40:0013
 		    dw	0
-keyflags	dw	0
+keyflags	dw	0 ;40:0017
 		    db	0
 kbbuf_head	dw	kbbuf-bios_data
 kbbuf_tail	dw	kbbuf-bios_data
@@ -1977,8 +1977,8 @@ kbbuf: times 32	db	'X'
 drivecal	db	0
 diskmotor	db	0
 motorshutoff	db	0x07
-disk_laststatus	db	0
-times 7		db	0
+disk_laststatus	db	0 ;40:0041
+times 7		db	0 ; 40:0042
 vidmode		db	0x03 ; 40:0049
 vid_cols	dw	80 ; 40:004a
 page_size	dw	0x1000
@@ -2005,7 +2005,7 @@ num_hd		db	0
 		dd	0
 kbbuf_start_ptr	dw	0x001e
 kbbuf_end_ptr	dw	0x003e
-vid_rows	db	25         ; at 40:84
+vid_rows	db	24         ; at 40:84
 		db	0
 		db	0
 vidmode_opt	db	0 ; 0x70
