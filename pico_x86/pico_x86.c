@@ -1038,6 +1038,9 @@ void pico_x86_cpu()
 
     next_opcode:
 
+        // Memory guard agains probing more than RAM_SIZE
+        *(uint32_t*)(mem + RAM_SIZE) = 0xFFFFFFFF;
+
         inst_size_t size = inst_size_table[raw_opcode_id];
 
         reg_ip += (i_mod * (i_mod != 3) + 2 * (!i_mod && i_rm == 6)) * i_mod_size + size.base_size
