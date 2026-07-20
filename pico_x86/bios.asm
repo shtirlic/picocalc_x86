@@ -455,7 +455,10 @@ mem_test_loop:
 
 
 boot_disk:
-    ; Read boot sector from FDD, and load it into 0:7C00
+
+	mov	byte [cs:boot_retry], 4
+
+  boot_disk_try:
 
 	mov	ax, 0
 	mov	es, ax
@@ -466,6 +469,30 @@ boot_disk:
 	mov	cx, 1
 	mov	bx, 0x7c00
 	int	13h
+
+	jnc	boot_disk_ok
+
+	; Reset the disk system before retrying
+
+	mov	ah, 0
+	mov	dl, [cs:boot_device]
+	int	13h
+
+	dec	byte [cs:boot_retry]
+	jnz	boot_disk_try
+
+    ; All retries failed
+
+	mov	si, bootfailstr
+	call	print_str
+	call	print_new_line
+
+  boot_disk_hang:
+
+	hlt
+	jmp	boot_disk_hang
+
+  boot_disk_ok:
 
     ; Jump to boot sector
 
@@ -554,16 +581,36 @@ int13:
 	je	int13_verify
 	cmp	ah, 0x05 ; Format track - does nothing here
 	je	int13_format
+	cmp	ah, 0x06 ; Format track and set bad sector flags (fixed disk) - no-op here
+	je	int13_format
+	cmp	ah, 0x07 ; Format drive starting at given track (fixed disk) - no-op here
+	je	int13_format
 	cmp	ah, 0x08 ; Get drive parameters (hard disk)
 	je	int13_getparams
+	cmp	ah, 0x09 ; Initialize drive pair characteristics
+	je	int13_initpair
+	cmp	ah, 0x0a ; Read long (with ECC bytes)
+	je	int13_read_disk
+	cmp	ah, 0x0b ; Write long (with ECC bytes)
+	je	int13_write_disk
 	cmp	ah, 0x0c ; Seek (hard disk)
 	je	int13_seek
+	cmp	ah, 0x0d ; Alternate disk reset (fixed disk)
+	je	int13_reset_disk
 	cmp	ah, 0x10 ; Check if drive ready (hard disk)
 	je	int13_hdready
+	cmp	ah, 0x11 ; Recalibrate (hard disk)
+	je	int13_seek
+	cmp	ah, 0x14 ; Controller internal diagnostic
+	je	int13_diag
 	cmp	ah, 0x15 ; Get disk type
 	je	int13_getdisktype
 	cmp	ah, 0x16 ; Detect disk change
 	je	int13_diskchange
+	cmp	ah, 0x18 ; Set media type for format
+	je	int13_setmedia
+	cmp	ah, 0x19 ; Park heads
+	je	int13_seek
 
 	mov	ah, 1 ; Invalid function
 	jmp	reach_stack_stc
@@ -572,11 +619,13 @@ int13:
 
   int13_reset_disk:
 
+	mov	byte [cs:disk_laststatus], 0
 	jmp	reach_stack_clc
 
   int13_last_status:
 
 	mov	ah, [cs:disk_laststatus]
+	cmp	ah, 0
 	je	ls_no_error
 
 	stc
@@ -827,6 +876,48 @@ wr_fine:
 	mov	ah, 0
 	jmp	reach_stack_clc
 
+  int13_initpair:
+
+	mov	ah, 0
+	jmp	reach_stack_clc
+
+  int13_diag:
+
+
+	mov	ah, 0
+	jmp	reach_stack_clc
+
+  int13_setmedia:
+
+	; AH=18h Set media type for format. Input: DL = drive, CH = track,
+	; CL = sectors/track requested.
+
+	cmp	dl, 0
+	jne	i13_setmedia_bad
+
+	cmp	cl, 9
+	je	i13_setmedia_ok
+	cmp	cl, 18
+	je	i13_setmedia_ok
+	cmp	cl, 36
+	je	i13_setmedia_ok
+
+  i13_setmedia_bad:
+
+	mov	ah, 0x0c	; Unsupported track/invalid media
+	jmp	reach_stack_stc
+
+  i13_setmedia_ok:
+
+	mov	[cs:int1e_spt], cl
+
+	push	cs
+	pop	es
+	mov	di, int1e	; ES:DI -> floppy disk parameter table (INT 1Eh)
+
+	mov	ah, 0
+	jmp	reach_stack_clc
+
   int13_hdready:
 
 	cmp	byte [cs:num_disks], 2	; HD present?
@@ -877,13 +968,18 @@ wr_fine:
 ; ************************* INT 14h - serial port functions
 
 int14:
-	cmp	ah, 3		; Only functions 00H-03H are implemented
+	cmp	ah, 5		; Functions 00H-05H are implemented
 	ja	int14_badfunc
 
-	; AH = function (00H init / 01H send / 02H receive / 03H status)
-	; DX = port number, AL = init byte (fn 00H) or char to send (fn 01H)
-	; Handled by real UART hardware; returns AH = line status,
-	; AL = char received (fn 02H) or modem status (fn 00H/03H).
+	; AH = function:
+	;   00H init          - AL = line control byte
+	;   01H send          - AL = character to send
+	;   02H receive       - returns AL = character received
+	;   03H status        - returns AH = line status, AL = modem status
+	;   04H extended init  - BH = parity, BL = stop bits, CH = data bits,
+	;                        CL = baud rate code
+	;   05H MCR access     - AL = 0 (read, -> BL) or 1 (write, BL = value)
+	; DX = port number.
 
 	extended_serial_io
 	iret
@@ -1504,6 +1600,7 @@ drive_heads_temp  dw 0
 drive_num_temp    dw 0
 boot_state	db 0
 cga_refresh_reg	db 0
+boot_retry	db 0
 
 ; Default interrupt handlers
 
@@ -2014,6 +2111,7 @@ itbl_size	dw $-int_table
 
 memteststr db   'Memory Test: ', 0
 kbokstr    db   ' KB OK', 0
+bootfailstr db  'Disk boot failure', 0
 
 
 ; INT 8 millisecond counter

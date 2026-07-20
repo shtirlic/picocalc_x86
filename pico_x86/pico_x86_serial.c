@@ -27,6 +27,17 @@ static uint8_t com1_dlm = 0x00;
 static bool com1_rx_irq_pending = false;
 static uint8_t com1_lsr_err_latch = 0; // Latched OE/PE/FE/BI bits, LSR bit positions
 
+static void com1_set_mcr(uint8_t val)
+{
+    com1_mcr = val;
+    if (val & 0x10)
+        hw_set_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
+    else
+        hw_clear_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
+    if (!(val & 0x08))
+        com1_rx_irq_pending = false; // OUT2 cleared: force re-arm on next enable
+}
+
 static void com1_apply_config(void)
 {
     uint16_t divisor = ((uint16_t)com1_dlm << 8) | com1_dll;
@@ -176,13 +187,7 @@ void __time_critical_func(serial_port_out)(uint16_t port)
         com1_apply_config();
         break;
     case 0x3FC: // MCR -- RTS/DTR/OUT1/OUT2/loopback bits
-        com1_mcr = val;
-        if (val & 0x10) // Loopback: wire PL011's LBE so self-tests pass
-            hw_set_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
-        else
-            hw_clear_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
-        if (!(val & 0x08))
-            com1_rx_irq_pending = false; // OUT2 cleared: force re-arm on next enable
+        com1_set_mcr(val);
         break;
     case 0x3FD: // LSR
     case 0x3FE: // MSR
@@ -297,6 +302,56 @@ void serial_ctl(void)
 #ifdef DEBUG_CONSOLE
         printf("[SERIAL DEBUG] status -> AH=%02x\n", regs8[REG_AH]);
 #endif
+        break;
+    }
+    case 0x04: { // Extended Initialize (PS/2-style)
+        // BH = parity (0=none,1=odd,2=even,3=mark,4=space)
+        // BL = stop bits (0=1, 1=2)
+        // CH = data bits (5-8)
+        // CL = baud rate code (0=110,1=150,2=300,3=600,4=1200,
+        //      5=2400,6=4800,7=9600,8=19200)
+        static const uint16_t ext_divisor_table[9] = { 1047, 768, 384, 192, 96, 48, 24, 12, 6 };
+        static const uint8_t ext_parity_bits[5] = { 0x00, 0x08, 0x18, 0x28, 0x38 };
+
+        uint8_t bh = regs8[REG_BH];
+        uint8_t bl = regs8[REG_BL];
+        uint8_t ch = regs8[REG_CH];
+        uint8_t cl = regs8[REG_CL];
+
+        if (cl > 8)
+            cl = 8;
+        if (ch < 5)
+            ch = 5;
+        if (ch > 8)
+            ch = 8;
+        if (bh > 4)
+            bh = 0;
+
+        uint16_t divisor = ext_divisor_table[cl];
+        com1_dll = divisor & 0xFF;
+        com1_dlm = (divisor >> 8) & 0xFF;
+        com1_lcr = (uint8_t)((ch - 5) | ((bl & 1) << 2) | ext_parity_bits[bh]);
+        com1_apply_config();
+
+        regs8[REG_AH] = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00)
+            | (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
+        regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
+#ifdef DEBUG_CONSOLE
+        printf("[SERIAL DEBUG] ext init: divisor=%u lcr=%02x -> AH=%02x\n", divisor, com1_lcr,
+            regs8[REG_AH]);
+#endif
+        break;
+    }
+    case 0x05: { // Modem Control Register access (PS/2-style)
+        // AL = 00h read MCR (-> BL = current value)
+        //    = 01h write MCR (BL = new value)
+        if (regs8[REG_AL] == 0x01) {
+            com1_set_mcr(regs8[REG_BL]);
+        } else {
+            regs8[REG_BL] = com1_mcr;
+            regs8[REG_BH] = 0;
+        }
+        regs8[REG_AH] = 0;
         break;
     }
     default:
