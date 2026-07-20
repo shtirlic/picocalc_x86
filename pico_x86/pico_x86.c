@@ -15,12 +15,12 @@
 #include "pico/time.h"
 
 #include "ff.h"
-#include "psram_spi.h"
 #include "picocalc_southbridge.h"
 
 #include "pico_x86.h"
 #include "pico_x86_video.h"
 #include "pico_x86_serial.h"
+#include "pico_x86_floppy.h"
 
 uint8_t __aligned(4) mem[RAM_SIZE + 16];
 
@@ -184,7 +184,7 @@ static void __always_inline(make_flags)()
 }
 
 // Set emulated CPU FLAGS register from regs8[FLAG_xx] values
-static void __time_critical_func(set_flags)(int new_flags)
+static void __always_inline set_flags(int new_flags)
 {
     regs8[FLAG_CF] = !!(new_flags & (1 << 0));
     regs8[FLAG_PF] = !!(new_flags & (1 << 2));
@@ -270,75 +270,10 @@ static uint64_t start_time = 0;
 static uint32_t sample_instructions = 0;
 #endif
 
-extern psram_spi_inst_t psram_spi;
-
-uint8_t ems_phys_alloc[EMS_MAX_PAGES] = { 0 };
-uint8_t ems_phys_handle[EMS_MAX_PAGES] = { 0 };
-uint16_t ems_phys_logical[EMS_MAX_PAGES] = { 0 };
-uint16_t ems_handle_count[EMS_MAX_HANDLES] = { 0 };
-
-// Active Page Hardware State (Only Physical Page 0 exists)
-uint32_t active_ems_psram_addr = 0;
-uint16_t ems_active_handle = 0xFFFF;
-uint16_t ems_active_logical = 0xFFFF;
-
-// Context Save Areas (AH=47h / AH=48h)
-uint16_t ems_saved_handle[EMS_MAX_HANDLES] = { 0 };
-uint16_t ems_saved_logical[EMS_MAX_HANDLES] = { 0 };
-
-static FIL fpb, fpd;
+static FIL fpd, fpfd;
 static FRESULT fr;
 
-// Helper: Flushes current physical page to PSRAM, loads new one
-static uint8_t map_ems_page(uint8_t phys_page, uint16_t handle, uint16_t logical_page)
-{
-    if (phys_page > 0)
-        return 0x8B; // Reject mappings to pages 1, 2, or 3
-
-    if (logical_page != 0xFFFF) {
-        if (handle >= EMS_MAX_HANDLES || ems_handle_count[handle] == 0)
-            return 0x83;
-        if (logical_page >= ems_handle_count[handle])
-            return 0x8A;
-    }
-
-    // Ignore redundant mapping requests
-    if (ems_active_handle == handle && ems_active_logical == logical_page)
-        return 0x00;
-
-    // Flush existing page to PSRAM
-    if (ems_active_handle != 0xFFFF) {
-        for (int i = 0; i < 16384; i += 2) {
-            psram_write16(
-                &psram_spi, active_ems_psram_addr + i, CAST(uint16_t) mem[EMS_SRAM_ADDRESS + i]);
-        }
-        ems_active_handle = 0xFFFF;
-    }
-
-    // Load new page from PSRAM
-    if (logical_page != 0xFFFF) {
-        uint32_t target_psram_page = 0xFFFFFFFF;
-        for (int i = 0; i < EMS_MAX_PAGES; i++) {
-            if (ems_phys_alloc[i] && ems_phys_handle[i] == handle
-                && ems_phys_logical[i] == logical_page) {
-                target_psram_page = i;
-                break;
-            }
-        }
-        if (target_psram_page == 0xFFFFFFFF)
-            return 0x8A; // Not found
-
-        uint32_t new_psram_addr = target_psram_page * 16384;
-        for (int i = 0; i < 16384; i += 2) {
-            CAST(uint16_t)
-            mem[EMS_SRAM_ADDRESS + i] = psram_read16(&psram_spi, new_psram_addr + i);
-        }
-        active_ems_psram_addr = new_psram_addr;
-        ems_active_handle = handle;
-        ems_active_logical = logical_page;
-    }
-    return 0x00;
-}
+static uint8_t floppy_present = 0;
 
 void pico_x86_run()
 {
@@ -357,6 +292,7 @@ void pico_x86_run()
 
 // TODO: bios override if present
 #ifndef BIOS_EMBED
+    FIL fpb;
     fr = f_open(&fpb, "0:/x86/bios.bin", FA_READ);
 
     // Load BIOS image into F000:0100, and set IP to 0100
@@ -375,7 +311,7 @@ void pico_x86_run()
     printf("\n▼ BIOS found in Flash at 0x%p, size: %zu bytes\n", _binary_bios_bin_start, bios_size);
     memcpy(regs8 + (reg_ip = 0x100), _binary_bios_bin_start, bios_size);
 #endif
-    // TODO: maybe simple ini conf?
+
     fr = f_open(&fpd, "0:/x86/hd.img", FA_READ | FA_WRITE);
     if (fr != FR_OK || f_size(&fpd) == 0) {
         printf("\n[FATAL ERROR] disk image is missing, empty, or SD card failed! "
@@ -386,6 +322,23 @@ void pico_x86_run()
     } else {
         printf("▼ DISK Image Size: %llu bytes\n", fpd.obj.objsize);
     }
+
+    fr = f_open(&fpfd, FDD_IMAGE_PATH, FA_READ | FA_WRITE);
+    if (fr != FR_OK || f_size(&fpfd) == 0) {
+        if (fr == FR_OK)
+            f_close(&fpfd);
+        printf("▼ No floppy image found, creating blank 1.44MB floppy image\n");
+        create_blank_floppy_image();
+        fr = f_open(&fpfd, FDD_IMAGE_PATH, FA_READ | FA_WRITE);
+    }
+    if (fr == FR_OK && f_size(&fpfd) > 0) {
+        printf("▼ FDD Image Size: %llu bytes\n", fpfd.obj.objsize);
+        floppy_present = 1;
+    } else {
+        printf("▼ Floppy image unavailable - drive A: not available\n");
+        floppy_present = 0;
+    }
+
     printf("\n▼ Starting BIOS...\n\n");
 
     // Set CX:AX equal to the hard disk image size, if present
@@ -976,12 +929,23 @@ void pico_x86_cpu()
                 regs16[REG_AX] = 0;
                 break;
             }
+            //  disk index in DX before this call: 0 = hd, 1 = fp
+            uint8_t is_floppy = regs16[REG_DX] & 1;
+            if (unlikely(is_floppy && !floppy_present)) {
+                regs16[REG_AX] = 0; // No media in drive A:
+                break;
+            }
+            FIL* fp = is_floppy ? &fpfd : &fpd;
             DWORD abs_sector = ((DWORD)regs16[REG_SI] << 16) | regs16[REG_BP];
-            if (likely(f_lseek(&fpd, abs_sector << 9) == FR_OK)) {
-                f_read(&fpd, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &br);
+            if (likely(f_lseek(fp, abs_sector << 9) == FR_OK)) {
+                f_read(fp, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &br);
             }
 
             if (unlikely(br == 0)) {
+                if (is_floppy) {
+                    regs16[REG_AX] = 0;
+                    break;
+                }
 #ifdef DEBUG_CONSOLE
                 printf("\n[FATAL ERROR] Disk read failed at absolute sector %lu!\n", abs_sector);
 #endif
@@ -993,11 +957,22 @@ void pico_x86_cpu()
         }
         case 3: { // DISK WRITE
             UINT bw = 0;
+            //  disk index in DX before this call: 0 = hd, 1 = fp
+            uint8_t is_floppy = regs16[REG_DX] & 1;
+            if (unlikely(is_floppy && !floppy_present)) {
+                regs16[REG_AX] = 0; // No media in drive A:
+                break;
+            }
+            FIL* fp = is_floppy ? &fpfd : &fpd;
             DWORD abs_sector = ((DWORD)regs16[REG_SI] << 16) | regs16[REG_BP];
-            if (likely(f_lseek(&fpd, abs_sector << 9) == FR_OK)) {
-                f_write(&fpd, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &bw);
+            if (likely(f_lseek(fp, abs_sector << 9) == FR_OK)) {
+                f_write(fp, mem + SEGREG(REG_ES, REG_BX, ), regs16[REG_AX], &bw);
             }
             if (unlikely(bw == 0)) {
+                if (is_floppy) {
+                    regs16[REG_AX] = 0;
+                    break;
+                }
 #ifdef DEBUG_CONSOLE
                 printf("\n[FATAL ERROR] Disk write failed at absolute sector %lu!\n", abs_sector);
 #endif
@@ -1005,171 +980,6 @@ void pico_x86_cpu()
                     ;
             }
             regs16[REG_AX] = bw;
-            break;
-        }
-        case 4: { // INT 67h Hardware EMS Manager
-            uint8_t ah = regs8[REG_AH];
-            switch (ah) {
-            case 0x40: // Get Manager Status
-                regs8[REG_AH] = 0x00;
-                break;
-
-            case 0x41: // Get Page Frame Segment
-                regs16[REG_BX] = 0xD000;
-                regs8[REG_AH] = 0x00;
-                break;
-
-            case 0x42: { // Get Unallocated Page Count
-                uint16_t free_pages = 0;
-                for (int i = 0; i < EMS_MAX_PAGES; i++)
-                    if (!ems_phys_alloc[i])
-                        free_pages++;
-                regs16[REG_BX] = free_pages;
-                regs16[REG_DX] = EMS_MAX_PAGES;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x43: { // Allocate Handle and Pages
-                uint16_t req_pages = regs16[REG_BX];
-                uint16_t free_pages = 0;
-                for (int i = 0; i < EMS_MAX_PAGES; i++)
-                    if (!ems_phys_alloc[i])
-                        free_pages++;
-
-                if (req_pages > free_pages) {
-                    regs8[REG_AH] = 0x88; // Not enough total free pages
-                    break;
-                }
-
-                int handle = -1;
-                for (int i = 1; i < EMS_MAX_HANDLES; i++) {
-                    if (ems_handle_count[i] == 0) {
-                        handle = i;
-                        break;
-                    }
-                }
-                if (handle == -1) {
-                    regs8[REG_AH] = 0x85;
-                    break;
-                }
-
-                int logical_idx = 0;
-                for (int i = 0; i < EMS_MAX_PAGES && logical_idx < req_pages; i++) {
-                    if (!ems_phys_alloc[i]) {
-                        ems_phys_alloc[i] = 1;
-                        ems_phys_handle[i] = handle;
-                        ems_phys_logical[i] = logical_idx++;
-                    }
-                }
-                ems_handle_count[handle] = req_pages;
-                regs16[REG_DX] = handle;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x44: { // Map Logical to Physical Page
-                uint8_t physical_page = regs8[REG_AL];
-                uint16_t logical_page = regs16[REG_BX];
-                uint16_t handle = regs16[REG_DX];
-
-                regs8[REG_AH] = map_ems_page(physical_page, handle, logical_page);
-                break;
-            }
-
-            case 0x45: { // Deallocate Handle
-                uint16_t handle = regs16[REG_DX];
-                if (handle >= EMS_MAX_HANDLES || ems_handle_count[handle] == 0) {
-                    regs8[REG_AH] = 0x83; // Invalid handle
-                    break;
-                }
-
-                // Force unmap if this handle is active in the frame
-                if (ems_active_handle == handle) {
-                    map_ems_page(0, 0, 0xFFFF);
-                }
-
-                // Free the physical pages
-                for (int i = 0; i < EMS_MAX_PAGES; i++) {
-                    if (ems_phys_alloc[i] && ems_phys_handle[i] == handle) {
-                        ems_phys_alloc[i] = 0;
-                    }
-                }
-                ems_handle_count[handle] = 0;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x46: // Get EMS Version
-                regs8[REG_AL] = 0x32; // EMS Version 3.2
-                regs8[REG_AH] = 0x00;
-                break;
-
-            case 0x47: { // Save Page Map
-                uint16_t handle = regs16[REG_DX];
-                if (handle >= EMS_MAX_HANDLES || ems_handle_count[handle] == 0) {
-                    regs8[REG_AH] = 0x83;
-                    break;
-                }
-                ems_saved_handle[handle] = ems_active_handle;
-                ems_saved_logical[handle] = ems_active_logical;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x48: { // Restore Page Map
-                uint16_t handle = regs16[REG_DX];
-                if (handle >= EMS_MAX_HANDLES || ems_handle_count[handle] == 0) {
-                    regs8[REG_AH] = 0x83;
-                    break;
-                }
-                map_ems_page(0, ems_saved_handle[handle], ems_saved_logical[handle]);
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x4B: { // Get Handle Count
-                uint16_t count = 0;
-                for (int i = 1; i < EMS_MAX_HANDLES; i++) {
-                    if (ems_handle_count[i] > 0)
-                        count++;
-                }
-                regs16[REG_BX] = count;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x4C: { // Get Page Count for Handle
-                uint16_t handle = regs16[REG_DX];
-                if (handle >= EMS_MAX_HANDLES || ems_handle_count[handle] == 0) {
-                    regs8[REG_AH] = 0x83; // Invalid handle
-                    break;
-                }
-                regs16[REG_BX] = ems_handle_count[handle];
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            case 0x4D: { // Get Page Count for All Handles
-                uint32_t dest = SEGREG(REG_ES, REG_DI, );
-                uint16_t count = 0;
-                for (int i = 1; i < EMS_MAX_HANDLES; i++) {
-                    if (ems_handle_count[i] > 0) {
-                        CAST(uint16_t) mem[dest] = i;
-                        CAST(uint16_t) mem[dest + 2] = ems_handle_count[i];
-                        dest += 4;
-                        count++;
-                    }
-                }
-                regs16[REG_BX] = count;
-                regs8[REG_AH] = 0x00;
-                break;
-            }
-
-            default:
-                regs8[REG_AH] = 0x84; // Function not supported
-                break;
-            }
             break;
         }
         case 5: {

@@ -35,13 +35,9 @@
 
 // Emulator system constants
 #define IO_PORT_COUNT 0x400
-#define RAM_SIZE 0x76000
-#define REGS_BASE 0x72000
-#define LOW_MEM_LIMIT 0x6A000 // Available memrory to DOS
-
-#define EMS_MAX_HANDLES 16
-#define EMS_MAX_PAGES 128 // 128 pages * 16KB = 2MB PSRAM
-#define EMS_SRAM_ADDRESS 0x6E000
+#define RAM_SIZE 0x74000
+#define REGS_BASE 0x70000
+#define LOW_MEM_LIMIT 0x6C000 // Available memrory to DOS
 
 // clang-format off
 static uint32_t __always_inline MAP_ADDR(uint32_t A) {
@@ -54,18 +50,14 @@ static uint32_t __always_inline MAP_ADDR(uint32_t A) {
 
     // CGA VRAM (Strictly 16KB: 0xB8000-0xBBFFF)
     if (A >= 0xB8000 && A < 0xBC000)
-        return 0x6A000 + (A - 0xB8000);
-
-    // EMS page frame D0000-D3FFF (Strictly 16KB)
-    if (A >= 0xD0000 && A < 0xD4000)
-        return 0x6E000 + (A - 0xD0000);
+        return 0x6C000 + (A - 0xB8000);
 
     // BIOS ROM F0000-FFFFF (Aliased into 16KB physical space)
     if (A >= 0xF0000)
-        return 0x72000 + ((A - 0xF0000) & 0x3FFF);
+        return 0x70000 + ((A - 0xF0000) & 0x3FFF);
 
     // all other unmapped memory
-    return 0x76000 + (A & 3);
+    return 0x74000 + (A & 3);
 }
 
 // 16-bit register decodes

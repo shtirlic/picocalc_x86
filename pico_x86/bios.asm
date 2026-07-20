@@ -29,10 +29,6 @@
 	db	0x0f, 0x03
 %endmacro
 
-%macro	extended_ems_call 0
-	db	0x0f, 0x04
-%endmacro
-
 %macro	extended_set_rtc 0
 	db	0x0f, 0x05
 %endmacro
@@ -72,8 +68,8 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Revision 0.6', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/13/26', 0, 0xfa, 0
+biosstr db	'PicoCalc x86 BIOS Revision 0.7', 0, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/20/26', 0, 0xfa, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
 
 bios_entry:
@@ -238,12 +234,6 @@ boot:	mov	ax, 0
 	mov	cx, 0xf000
 	mov	word [es:4*0x41 + 2], cx
 
-    ;  Set pointer to INT 67h for EMS ---
-
-	mov	cx, int67
-	mov	word [es:4*0x67], cx
-	mov	cx, 0xf000
-	mov	word [es:4*0x67 + 2], cx
 
     ; Set up last 16 bytes of memory, including boot jump, BIOS date, machine ID byte
 
@@ -1533,13 +1523,6 @@ int1c:
 
 	iret
 
-; ************************* INT 67h - EMS Manager
-
-int67:
-	extended_ems_call
-	iret
-
-
 ; ************************* INT 1Eh - diskette parameter table
 
 int1e:
@@ -1967,7 +1950,7 @@ lpt3addr	dw	0
 lpt4addr	dw	0
 equip		dw	0b0000001000100001 ; 40:0010
 		    db	0
-memsize		dw	0x1a8 ; 40:0013
+memsize		dw	0x1b0 ; 40:0013
 		    dw	0
 keyflags	dw	0 ;40:0017
 		    db	0
