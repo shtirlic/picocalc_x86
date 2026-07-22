@@ -27,7 +27,6 @@ psram_spi_inst_t psram_spi;
 
 extern uint8_t mem[];
 extern uint8_t io_ports[];
-extern uint32_t int8_asap;
 
 static uint32_t video_frames;
 static float target_fps = 60.0f;
@@ -42,9 +41,9 @@ static uint8_t speaker_high = 0; // current output state
 static struct repeating_timer xt_timer;
 
 // ISR every ~54.9ms (18.2Hz)
-static bool __always_inline xt_timer_callback(struct repeating_timer* t)
+static bool __time_critical_func(xt_timer_callback)(struct repeating_timer* t)
 {
-    int8_asap = 1;
+    pico_x86_timer_tick();
     return true;
 }
 
@@ -88,7 +87,7 @@ static void(second_core)()
     video_cga_set_resolution(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     picocalc_display_show_image(image_data_splash, sizeof(image_data_splash));
-    sleep_ms(1000);
+    sleep_ms(500);
 
     while (1) {
         const uint64_t current_tick = time_us_64();

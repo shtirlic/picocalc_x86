@@ -60,7 +60,7 @@ uint16_t* __scratch_y("cpu") regs16;
 uint32_t __scratch_y("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
     xlat_opcode_id, extra, rep_mode, rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en;
 
-uint32_t __scratch_y("cpu") int8_asap = 0;
+static uint32_t __scratch_y("cpu") int8_asap = 0;
 
 uint16_t __scratch_y("cpu") reg_ip, seg_override;
 
@@ -274,6 +274,8 @@ static FIL fpd, fpfd;
 static FRESULT fr;
 
 static uint8_t floppy_present = 0;
+
+void pico_x86_timer_tick() { int8_asap = 1; }
 
 void pico_x86_run()
 {

@@ -136,3 +136,4 @@ extern uint16_t picocalc_southbridge_kb_read();
 
 void pico_x86_run();
 void pico_x86_cpu();
+void pico_x86_timer_tick();
