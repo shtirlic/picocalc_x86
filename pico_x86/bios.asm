@@ -1611,7 +1611,9 @@ iret
 
 beep:
     push ax
+    push bx
     push cx
+    push dx
 
     mov al, 0xB6
     out 0x43, al
@@ -1625,15 +1627,24 @@ beep:
     or  al, 0x03
     out 0x61, al
 
-    mov cx, 0x8000
-  .loop:
-    nop
-    loop .loop
+    mov ah, 00h
+    int 1Ah
+    mov bx, dx
+    add bx, 8
 
-    xor al, 0x03
+  .wait_loop:
+    mov ah, 00h
+    int 1Ah
+    cmp dx, bx
+    jne .wait_loop
+
+    in  al, 0x61
+    and al, 0xFC
     out 0x61, al
 
+    pop dx
     pop cx
+    pop bx
     pop ax
     ret
 
