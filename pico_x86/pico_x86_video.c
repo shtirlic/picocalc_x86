@@ -99,7 +99,7 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
     else if (port == 0x3D8) {
         uint8_t port_value = io_ports[0x3D8];
 
-        crtc.mcr_display_reset |= ((port_value & 0x80) != 0); // bit 7
+        crtc.mcr_display_reset |= ((port_value & 0x80) != 0); // bit 7 custom reset
         crtc.mcr_blink_enabled = (port_value & 0x20) != 0; // bit 5
         crtc.mcr_hires_graphics_mode = (port_value & 0x10) != 0; // 4
         crtc.mcr_video_output = (port_value & 0x8) != 0; // 3
@@ -136,12 +136,11 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
     bool cursor_blink = (cga_now % 533333) > 266666;
     bool text_blink_hide = (cga_now % 1066666) >= 533333;
 
-    uint8_t border_color_idx = crtc.color_select_register & 0x0F;
-    uint16_t border_color = textmode_palette[border_color_idx];
+    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
 
     // Top margin
     for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(border_color);
+        put_color(bg_color);
     }
 
     for (int text_row = 0; text_row < num_rows; text_row++) {
@@ -209,7 +208,7 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
 
     // Bottom margin
     for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(border_color);
+        put_color(bg_color);
     }
 }
 
@@ -321,5 +320,5 @@ void video_cga_set_resolution(uint16_t width, uint16_t height)
 {
     screen_width = width;
     screen_height = height;
-    vram = &mem[MAP_ADDR(0xb8000)]; // define?
+    vram = &mem[MAP_ADDR(CGA_VRAM_ADDR)];
 }
