@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(pico_x86
     LANGUAGES C CXX ASM
-    VERSION 0.0.1
+    VERSION 0.0.3
     DESCRIPTION "Raspberry Pi Pico 2 x86 emulator"
 )
 add_library(pico_x86 INTERFACE)

@@ -16,7 +16,7 @@ include(/usr/share/pico-sdk/external/pico_sdk_import.cmake)
 
 project(picocalc_x86
         LANGUAGES C CXX ASM
-        VERSION 0.0.1
+        VERSION 0.0.3
         DESCRIPTION "PicoCalc x86 Emulator for PicoCalc on Pico 2."
 )
 
@@ -33,9 +33,7 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_display picocalc_display)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_southbridge picocalc_southbridge)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_sound picocalc_sound)
 
-
 add_executable(picocalc_x86 picocalc_x86.c)
-
 
 target_compile_definitions(picocalc_x86 PRIVATE
     PSRAM_MUTEX=1
@@ -50,13 +48,13 @@ target_compile_definitions(picocalc_x86 PRIVATE
     # DEBUG_PERF
     # DEBUG_KBD
     DEBUG_CONSOLE
-    DEBUG_EMS
 )
 
 target_compile_options(picocalc_x86 PRIVATE
 	-fno-strict-aliasing
 	-funroll-loops
 	-fomit-frame-pointer
+    --param max-inline-insns-auto=200
 )
 
 target_link_options(picocalc_x86 PRIVATE

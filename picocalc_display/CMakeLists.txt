@@ -1,5 +1,7 @@
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 project(picocalc_display
-        VERSION 0.0.1
         DESCRIPTION "PicoCalc display PIO/SPI driver."
         )
 
