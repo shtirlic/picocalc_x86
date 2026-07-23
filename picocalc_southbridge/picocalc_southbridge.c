@@ -70,15 +70,15 @@ static __always_inline uint8_t translate_kbd_code(uint8_t raw_code) {
 }
 
 // clang-format on
-static uint64_t wait_start = 0;
+// static uint64_t wait_start = 0;
 
 uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
 {
     if (!sb_initialized)
         return -1;
 
-    if ((time_us_64() - wait_start) < 30000)
-        return -1;
+    // if ((time_us_64() - wait_start) < 10000)
+    // return -1;
 
     unsigned char msg[1] = { SB_REG_FIF };
     int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
@@ -86,7 +86,7 @@ uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
         printf("picocalc_southbridge_kb_read i2c write error\n");
         return -1;
     }
-    wait_start = time_us_64();
+    // wait_start = time_us_64();
 
     uint8_t buff[2] = { 0 };
     retval

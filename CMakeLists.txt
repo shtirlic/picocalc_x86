@@ -16,24 +16,27 @@ include(/usr/share/pico-sdk/external/pico_sdk_import.cmake)
 
 project(picocalc_x86
         LANGUAGES C CXX ASM
-        VERSION 0.0.3
-        DESCRIPTION "PicoCalc x86 Emulator for PicoCalc on Pico 2."
+        VERSION 0.0.4
+        DESCRIPTION "PicoCalc x86 Emulator on Raspberry Pi Pico 2"
 )
 
 pico_sdk_init()
 
 include_directories(
   ${CMAKE_CURRENT_LIST_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/rp2040-psram rp2040-psram)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_fatfs pico_fatfs)
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_x86 pico_x86)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_display picocalc_display)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_southbridge picocalc_southbridge)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_sound picocalc_sound)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_x86 pico_x86)
 
 add_executable(picocalc_x86 picocalc_x86.c)
+
+configure_file(config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
 target_compile_definitions(picocalc_x86 PRIVATE
     PSRAM_MUTEX=1

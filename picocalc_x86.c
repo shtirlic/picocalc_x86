@@ -11,6 +11,8 @@
 #include "pico/aon_timer.h"
 #include "pico/util/datetime.h"
 
+#include "config.h"
+
 #include "psram_spi.h"
 #include "tf_card.h"
 #include "ff.h"
@@ -29,7 +31,6 @@ extern uint8_t mem[];
 extern uint8_t io_ports[];
 
 static uint32_t video_frames;
-static float target_fps = 60.0f;
 
 static FATFS fs;
 
@@ -76,52 +77,6 @@ static void __isr(pico_x86_speaker_irq)()
     pwm_set_chan_level(pwm_gpio_to_slice_num(AUDIO_PIN_R), PWM_CHAN_B, level);
 }
 
-static void(second_core)()
-{
-    const uint64_t frame_duration_us = 1000000ULL / target_fps;
-
-    add_repeating_timer_us(-54925, xt_timer_callback, NULL, &xt_timer);
-
-    uint64_t last_frame_tick = time_us_64();
-
-    video_cga_set_resolution(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    picocalc_display_show_image(image_data_splash, sizeof(image_data_splash));
-    sleep_ms(500);
-
-    while (1) {
-        const uint64_t current_tick = time_us_64();
-        if (current_tick - last_frame_tick >= frame_duration_us) {
-            //       printf("Refresh LCD\n");
-            //       mem[0x44E] = 0;
-            // uint16_t crtc_offset = mem[MAP_ADDR(0x4AC)] | (mem[MAP_ADDR(0x4AD)] << 8);
-            // uint16_t page_offset = mem[MAP_ADDR(0x44E)] | (mem[MAP_ADDR(0x44F)] << 8);
-            // printf("Page Offset: %d CRTC Offset: %d\n", page_offset, crtc_offset);
-
-            // uint8_t video_mode = mem[MAP_ADDR(0x449)];
-            // printf("Video mode: %d \n", video_mode);
-
-            video_display_reset(picocalc_display_reset);
-            picocalc_display_begin_frame();
-            video_cga_render(picocalc_display_put_color);
-            video_frames++;
-            last_frame_tick += frame_duration_us;
-        }
-        //     busy_wait_ms(1000);
-        tight_loop_contents();
-    }
-    __unreachable();
-}
-
-static void loop()
-{
-    while (1) {
-        pico_x86_run();
-        tight_loop_contents();
-    }
-    __unreachable();
-}
-
 static void init_sound()
 {
     printf("%s", "\n▼ Sound Init...");
@@ -139,8 +94,70 @@ static void init_sothbridge()
 static void init_display()
 {
     printf("%s", "\n▼ Display Init...");
-
     picocalc_display_init();
+    picocalc_display_show_image(image_data_splash, sizeof(image_data_splash));
+    sleep_ms(500);
+    printf("%s", "done\n");
+}
+static void init_pit() { add_repeating_timer_us(-54925, xt_timer_callback, NULL, &xt_timer); }
+
+static void display_render()
+{
+    Video_Config video_config = {
+        .display_reset_callback = picocalc_display_reset,
+        .display_begin_frame_callback = picocalc_display_begin_frame,
+        .screen_height = SCREEN_HEIGHT,
+        .screen_width = SCREEN_WIDTH,
+        .display_put_color_callback = picocalc_display_put_color,
+    };
+    video_set_config(&video_config);
+    video_display_init();
+
+    static uint64_t last_frame_tick;
+    static uint64_t frame_duration;
+    static float fps;
+
+    last_frame_tick = time_us_64();
+    while (1) {
+        video_cga_render();
+        video_frames++;
+
+        uint64_t current_time = time_us_64();
+        frame_duration = current_time - last_frame_tick; // Time since the LAST frame finished
+        fps = 1000000.0f / (float)frame_duration;
+
+        last_frame_tick = current_time;
+
+#ifdef DEBUG_CONSOLE
+        printf("Video stats: FPS: %.2f, Time: %llu \r", fps, frame_duration);
+#endif
+        tight_loop_contents();
+    }
+    __unreachable();
+}
+
+static void(second_core)()
+{
+    init_sothbridge();
+    init_sound();
+    init_pit();
+    init_display();
+    display_render();
+    __unreachable();
+}
+
+static void loop()
+{
+    while (1) {
+        pico_x86_run();
+        tight_loop_contents();
+    }
+    __unreachable();
+}
+
+static void init_peripherals()
+{
+    printf("%s", "\n▼ Peripherals Init...");
     multicore_reset_core1();
     multicore_launch_core1(second_core);
     printf("%s", "done\n");
@@ -192,26 +209,24 @@ static void init_fs()
     // f_unmount("");                 /* Unmount the default drive */
 }
 
-static void init()
+static void init_system()
 {
-    set_sys_clock_khz(230000, true);
-    // set_sys_clock_khz(150000, true);
-
+    set_sys_clock_khz(240000, true);
     bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
-
     aon_timer_start_with_timeofday();
-
     stdio_init_all();
     // setvbuf(stdout, NULL, _IONBF, 0);
+}
 
-    printf("%s", "\n\n▼ PicoCalc x86 Version 0.1\n");
+static void init()
+{
+    init_system();
+    printf("%s", "\n\n▼ PicoCalc x86 Version: %s , Build: %s \n", APP_VERSION, __DATE__);
 
     printf("%s", "\n▼ PicoCalc Init... \n");
     init_ram();
     init_fs();
-    init_sothbridge();
-    init_display();
-    init_sound();
+    init_peripherals();
     printf("%s", "\n▼ PicoCalc Ready... \n");
 }
 

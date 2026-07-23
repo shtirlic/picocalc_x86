@@ -17,7 +17,7 @@
 #include "picocalc_display.h"
 #include "picocalc_display.pio.h"
 
-#define SERIAL_CLK_DIV 1.92f
+#define SERIAL_CLK_DIV 1.5f
 #define MADCTL_BGR_PIXEL_ORDER (1 << 3)
 #define MADCTL_ROW_COLUMN_EXCHANGE (1 << 5)
 #define MADCTL_COLUMN_ADDRESS_ORDER_SWAP (1 << 6)
@@ -25,7 +25,7 @@
 static uint sm_video_output = 0;
 static PIO pio = pio0;
 
-static constexpr uint8_t init_seq[] = {
+static const uint8_t init_seq[] = {
 
     // Software reset
     1, 20, 0x01,
@@ -159,11 +159,12 @@ static void lcd_init(const uint8_t* seq)
         sleep_ms(seq[1] * 5);
         seq += *seq + 2;
     }
+    lcd_set_window(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
 static void __always_inline start_pixels()
 {
-    constexpr uint8_t cmd = 0x2c; // RAMWR
+    const uint8_t cmd = 0x2c; // RAMWR
     lcd_write_cmd(&cmd, 1);
     lcd_set_dc_cs(1, 0);
 }
@@ -196,8 +197,6 @@ void picocalc_display_init()
     gpio_set_dir(TFT_LED_PIN, GPIO_OUT);
 
     lcd_init(init_seq);
-
-    lcd_set_window(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
 // Basic show for bitmaps

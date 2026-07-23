@@ -62,8 +62,8 @@ static void com1_apply_config(void)
     uart_set_format(SERIAL_UART_ID, data_bits, stop_bits, parity);
     uart_set_break(SERIAL_UART_ID, brk);
     hw_set_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_UARTEN_BITS);
-    printf("[SERIAL DEBUG] serial UART: %d config change: %d %d,%d,%d break=%d\n", SERIAL_UART_ID,
-        baud, data_bits, parity, stop_bits, brk);
+    // printf("[SERIAL DEBUG] serial UART: config change: %d %d,%d,%d break=%d\n", baud, data_bits,
+    // parity, stop_bits, brk);
 }
 
 void serial_hw_init(void)
@@ -78,7 +78,7 @@ void serial_hw_init(void)
     uart_set_fifo_enabled(SERIAL_UART_ID, true);
     serial_hw_ready = true;
     com1_apply_config();
-    printf("[SERIAL DEBUG] UART up: TX=%d RX=%d\n", SERIAL_TX_PIN, SERIAL_RX_PIN);
+    // printf("[SERIAL DEBUG] UART up: TX=%d RX=%d\n", SERIAL_TX_PIN, SERIAL_RX_PIN);
 }
 
 void __time_critical_func(serial_port_in)(uint16_t port)
@@ -207,7 +207,7 @@ void serial_ctl(void)
 
     // We support only COM1
     if (unlikely(port != 0)) {
-        printf("[SERIAL DEBUG] port %04x != 0, reporting not-present\n", port);
+        // printf("[SERIAL DEBUG] port %04x != 0, reporting not-present\n", port);
         regs8[REG_AH] = 0x80; // Timeout / port not present
         return;
     }
@@ -251,10 +251,9 @@ void serial_ctl(void)
         regs8[REG_AH] = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00)
             | (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
         regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
-        printf("[SERIAL DEBUG] init: baud=%lu data_bits=%lu stop_bits=%lu parity=%d "
-               "-> AH=%02x\n",
-            (unsigned long)baud_table[baud_sel], (unsigned long)data_bits, (unsigned long)stop_bits,
-            parity, regs8[REG_AH]);
+        // printf("[SERIAL DEBUG] init: baud=%d data_bits=%d stop_bits=%d parity=%d "
+        //    "-> AH=%02x\n",
+        // baud_table[baud_sel], data_bits, stop_bits, parity, regs8[REG_AH]);
         break;
     }
     case 0x01: { // Send character in AL

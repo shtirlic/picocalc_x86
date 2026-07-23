@@ -7,16 +7,16 @@
 #include "pico_x86.h"
 #include "pico_x86_video.h"
 #include "font4x10.h"
+#include "font8x8.h"
 
 extern uint8_t mem[];
 extern uint8_t io_ports[];
 // extern uint16_t regs16[];
 // extern uint16_t reg_ip;
 
-CRTC_State __scratch_y("video") crtc = { };
-static uint16_t __scratch_y("video") screen_width;
-static uint16_t __scratch_y("video") screen_height;
-static uint8_t* __scratch_y("video") vram = NULL;
+static CRTC_State __scratch_y("video") crtc = { };
+static Video_Config __scratch_y("video") * video_config = nullptr;
+static uint8_t* __scratch_y("video") vram = nullptr;
 
 void __time_critical_func(video_cga_port_in)(uint32_t port)
 {
@@ -116,7 +116,7 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
     }
 }
 
-static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
+static void __time_critical_func(render_text_mode)()
 {
     int num_cols = crtc.dr_horiz_displayed;
     if (num_cols == 0) {
@@ -128,9 +128,14 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
         num_rows = 25;
     }
 
-    int pixel_scale = crtc.mcr_hires ? 1 : 2;
+    bool is_80_col = crtc.mcr_hires;
+    int font_height = is_80_col ? 10 : 8;
+    int font_width = is_80_col ? 4 : 8;
 
-    const int VERTICAL_MARGIN = 35;
+    int output_rows = num_rows * font_height;
+    int VERTICAL_MARGIN = (video_config->screen_height > output_rows)
+        ? (video_config->screen_height - output_rows) / 2
+        : 0;
 
     uint64_t cga_now = time_us_64();
     bool cursor_blink = (cga_now % 533333) > 266666;
@@ -139,12 +144,12 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
     uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
 
     // Top margin
-    for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(bg_color);
+    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
+        video_config->display_put_color_callback(bg_color);
     }
 
     for (int text_row = 0; text_row < num_rows; text_row++) {
-        for (int font_y = 0; font_y < 10; font_y++) {
+        for (int font_y = 0; font_y < font_height; font_y++) {
             for (int text_col = 0; text_col < num_cols; text_col++) {
 
                 uint16_t cell_index = text_row * num_cols + text_col;
@@ -160,8 +165,9 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
                         in_cursor_range
                             = (font_y >= crtc.dr_cursor_start && font_y <= crtc.dr_cursor_end);
                     } else {
-                        in_cursor_range = ((font_y >= crtc.dr_cursor_start && font_y <= 7)
-                            || font_y <= crtc.dr_cursor_end);
+                        in_cursor_range
+                            = ((font_y >= crtc.dr_cursor_start && font_y <= (font_height - 1))
+                                || font_y <= crtc.dr_cursor_end);
                     }
                     if (in_cursor_range) {
                         color_attr = ((color_attr & 0x0F) << 4) | ((color_attr & 0xF0) >> 4);
@@ -182,44 +188,46 @@ static void __time_critical_func(render_text_mode)(video_put_color_cb put_color)
                 }
 
                 bool hide_foreground = is_blinking && text_blink_hide;
-
-                // 1-pixel shift for text, ignore box-drawing
                 uint8_t glyph_pixels = 0;
-                if (character >= 0xB0 && character <= 0xDF) {
-                    glyph_pixels = font_4x10[(character * 10) + font_y];
-                } else {
-                    if (font_y >= 1) {
-                        glyph_pixels = font_4x10[(character * 10) + (font_y - 1)];
+
+                if (is_80_col) {
+                    if (character >= 0xB0 && character <= 0xDF) {
+                        glyph_pixels = font_4x10[(character * 10) + font_y];
+                    } else {
+                        if (font_y >= 1) {
+                            glyph_pixels = font_4x10[(character * 10) + (font_y - 1)];
+                        }
                     }
+                } else {
+                    glyph_pixels = font_8x8[(character * 8) + font_y];
                 }
 
-                for (int bit = 0; bit < 4; bit++) {
-                    uint8_t is_foreground = (glyph_pixels >> (3 - bit)) & 1;
+                for (int bit = 0; bit < font_width; bit++) {
+
+                    // Bit 3 is MSB for 4x10, Bit 7 is MSB for 8x8
+                    uint8_t msb = is_80_col ? 3 : 7;
+                    uint8_t is_foreground = (glyph_pixels >> (msb - bit)) & 1;
+
                     uint8_t palette_idx = (is_foreground && !hide_foreground) ? fg_idx : bg_idx;
                     uint16_t color = textmode_palette[palette_idx];
-
-                    for (int s = 0; s < pixel_scale; s++) {
-                        put_color(color);
-                    }
+                    video_config->display_put_color_callback(color);
                 }
             }
         }
     }
 
     // Bottom margin
-    for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(bg_color);
+    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
+        video_config->display_put_color_callback(bg_color);
     }
 }
 
-static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_color)
+static void __time_critical_func(render_cga_graphics)()
 {
-
     bool is_1bpp_mode = crtc.mcr_hires_graphics_mode;
     const int OUTPUT_ROWS = 200;
-    const int VERTICAL_MARGIN = (screen_height - OUTPUT_ROWS) / 2;
+    const int VERTICAL_MARGIN = (video_config->screen_height - OUTPUT_ROWS) / 2;
 
-    // --- DECODE PALETTE & BACKGROUND SETTINGS ---
     // Background color (low 4 bits mapped to standard text palette)
     uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
 
@@ -245,8 +253,8 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
     uint16_t m6_bg_color = textmode_palette[0]; // Black
 
     // Top margin
-    for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(bg_color);
+    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
+        video_config->display_put_color_callback(bg_color);
     }
 
     for (int out_y = 0; out_y < OUTPUT_ROWS; out_y++) {
@@ -266,7 +274,7 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
                     uint8_t lo = (pixel_data >> (6 - p * 2)) & 1;
                     uint8_t bit = hi | lo;
                     uint16_t color = bit ? m6_fg_color : m6_bg_color;
-                    put_color(color);
+                    video_config->display_put_color_callback(color);
                 }
                 continue;
             }
@@ -282,43 +290,44 @@ static void __time_critical_func(render_cga_graphics)(video_put_color_cb put_col
             uint16_t c2 = p2_val ? cga_palette[base_pal + p2_val] : bg_color;
             uint16_t c3 = p3_val ? cga_palette[base_pal + p3_val] : bg_color;
 
-            put_color(c0);
-            put_color(c1);
-            put_color(c2);
-            put_color(c3);
+            video_config->display_put_color_callback(c0);
+            video_config->display_put_color_callback(c1);
+            video_config->display_put_color_callback(c2);
+            video_config->display_put_color_callback(c3);
         }
     }
 
     // Bottom margin
-    for (int i = 0; i < (screen_width * VERTICAL_MARGIN); i++) {
-        put_color(bg_color);
+    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
+        video_config->display_put_color_callback(bg_color);
     }
 }
 
-void __always_inline video_display_reset(video_display_reset_cb reset_cb)
+static void __always_inline video_display_reset()
 {
     if (crtc.mcr_display_reset) {
-        reset_cb();
+        video_config->display_reset_callback();
         crtc.mcr_display_reset = false;
     }
 }
 
-void __always_inline video_cga_render(video_put_color_cb put_color)
+void video_cga_render()
 {
-    if (!crtc.mcr_video_output || crtc.mcr_display_reset) {
+    video_display_reset();
+
+    if (!crtc.mcr_video_output) {
         // maybe draw black screen?
         return;
     }
+
+    video_config->display_begin_frame_callback();
+
     if (crtc.mcr_graphics_mode || crtc.mcr_hires_graphics_mode) {
-        render_cga_graphics(put_color);
+        render_cga_graphics();
     } else {
-        render_text_mode(put_color);
+        render_text_mode();
     }
 }
 
-void video_cga_set_resolution(uint16_t width, uint16_t height)
-{
-    screen_width = width;
-    screen_height = height;
-    vram = &mem[MAP_ADDR(CGA_VRAM_ADDR)];
-}
+void video_display_init() { vram = &mem[MAP_ADDR(CGA_VRAM_ADDR)]; }
+void video_set_config(Video_Config* video_cfg) { video_config = video_cfg; }

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #ifndef TFT_RST_PIN
 #define TFT_RST_PIN 15
 #endif
@@ -35,8 +37,8 @@
 #define SCREEN_HEIGHT 320
 #endif
 
-void picocalc_display_init();
-void __time_critical_func(picocalc_display_reset)();
-void __time_critical_func(picocalc_display_begin_frame)();
+void picocalc_display_init(void);
+void __time_critical_func(picocalc_display_reset)(void);
+void __time_critical_func(picocalc_display_begin_frame)(void);
 void __time_critical_func(picocalc_display_put_color)(uint16_t color);
 void picocalc_display_show_image(const uint8_t* image, size_t size);

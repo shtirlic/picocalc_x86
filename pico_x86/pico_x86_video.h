@@ -6,7 +6,7 @@
 
 #define CGA_VRAM_ADDR 0xb8000
 
-typedef struct {
+typedef struct __attribute__((packed, aligned(4))) {
     // Hardware Index State
     // ADDR_6845  0040:0063 0x3D4
 
@@ -115,25 +115,6 @@ typedef struct {
 
 } CRTC_State; // CGA CRTC
 
-// static const uint16_t textmode_palette[16] = {
-//     0x0000, // 0: Black         (Standard)
-//     0x1108, // 1: Blue          (Deep Navy - prevents background glare)
-//     0x2404, // 2: Green         (Slightly darker)
-//     0x2410, // 3: Cyan          (Desaturated, readable on navy)
-//     0x8104, // 4: Red           (Deeper red)
-//     0x8110, // 5: Magenta       (Softer magenta)
-//     0x8304, // 6: Brown         (True brown, not muddy red)
-//     0xA514, // 7: Light Gray    (Dimmed to reduce halo effect)
-//     0x5290, // 8: Dark Gray     (Slightly lifted for contrast)
-//     0x4318, // 9: Bright Blue   (Muted for readability)
-//     0x4688, // 10: Bright Green (Less toxic)
-//     0x469A, // 11: Bright Cyan  (Softened significantly for 4x10 text)
-//     0xD208, // 12: Bright Red   (Slightly desaturated)
-//     0xD21A, // 13: Bright Magenta (Slightly desaturated)
-//     0xD688, // 14: Yellow       (Warm yellow, less acidic)
-//     0xE71C // 15: White        (Off-white/Soft gray to eliminate blooming)
-// };
-
 static const uint16_t textmode_palette[16] = {
     0x0000, // 0  - Black
     0x0015, // 1  - Blue
@@ -168,9 +149,20 @@ static const uint16_t cga_palette[24] = {
 void __time_critical_func(video_cga_port_in)(uint32_t port);
 void __time_critical_func(video_cga_port_out)(uint32_t port);
 
-typedef void (*video_put_color_cb)(uint16_t color);
+typedef void (*video_display_put_color_cb)(uint16_t color);
 typedef void (*video_display_reset_cb)();
+typedef void (*video_display_begin_frame_cb)();
 
-void video_cga_render(video_put_color_cb put_color);
-void video_cga_set_resolution(uint16_t width, uint16_t height);
-void video_display_reset(video_display_reset_cb reset_cb);
+typedef struct __attribute__((packed, aligned(4))) {
+    uint16_t screen_width;
+    uint16_t screen_height;
+
+    video_display_put_color_cb display_put_color_callback;
+    video_display_reset_cb display_reset_callback;
+    video_display_begin_frame_cb display_begin_frame_callback;
+
+} Video_Config;
+
+void video_display_init(void);
+void video_cga_render(void);
+void video_set_config(Video_Config* video_cfg);

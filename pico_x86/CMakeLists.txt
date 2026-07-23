@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(pico_x86
     LANGUAGES C CXX ASM
-    VERSION 0.0.3
+    VERSION 0.0.4
     DESCRIPTION "Raspberry Pi Pico 2 x86 emulator"
 )
 add_library(pico_x86 INTERFACE)
@@ -20,7 +20,6 @@ target_sources(pico_x86 INTERFACE
 )
 
 target_include_directories(pico_x86 INTERFACE ${CMAKE_CURRENT_LIST_DIR} )
-
 
 find_program(NASM_CMD nasm)
 if(NOT NASM_CMD)
@@ -36,16 +35,17 @@ add_custom_command(
 )
 add_custom_target(
     build_bios ALL
-    DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/bios.bin")
+    DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/bios.bin"
+)
 
-add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
-    COMMAND ${NASM_CMD}  -f bin ${CMAKE_CURRENT_SOURCE_DIR}/pico-ems.asm -o ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pico-ems.asm
-    COMMENT "Assembling PicoCalc x86 PICOEMS.SYS EMS driver for DOS"
-    VERBATIM
-)
-add_custom_target(
-    build_ems_driver ALL
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
-)
+# add_custom_command(
+#     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
+#     COMMAND ${NASM_CMD}  -f bin ${CMAKE_CURRENT_SOURCE_DIR}/pico-ems.asm -o ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
+#     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pico-ems.asm
+#     COMMENT "Assembling PicoCalc x86 PICOEMS.SYS EMS driver for DOS"
+#     VERBATIM
+# )
+# add_custom_target(
+#     build_ems_driver ALL
+#     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/PICOEMS.SYS
+# )

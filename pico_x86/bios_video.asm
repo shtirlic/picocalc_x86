@@ -828,9 +828,14 @@ plot_char_gfx:
 	and	dx, 1
 	mov	cl, 13
 	shl	dx, cl
+
+    push dx
+
 	shr	ax, 1
 	mov	bx, 80
 	mul	bx
+
+    pop dx
 	add	ax, dx
 	mov	di, ax
 
