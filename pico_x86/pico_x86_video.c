@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "pico/time.h"
 
 #include "pico_x86.h"
 #include "pico_x86_video.h"
@@ -18,10 +19,67 @@ static CRTC_State __scratch_y("video") crtc = { };
 static Video_Config __scratch_y("video") * video_config = nullptr;
 static uint8_t* __scratch_y("video") vram = nullptr;
 
+static uint16_t __scratch_y("video") ma_row_start = 0; // Current Memory Address (VRAM pointer)
+static uint8_t __scratch_y("video") ra = 0; // Current Row Address (Scanline within character)
+
+static uint16_t __scratch_y("video") current_crtc_scanline = 0;
+static uint32_t __scratch_y("video") scanline_start_time = 0;
+
+static uint16_t __scratch_y("video") active_display_start = 60;
+static uint16_t __scratch_y("video") active_display_end = 260;
+
+static TextGeometry __scratch_y("video") frame_text_geo = { };
+
+static void __time_critical_func(update_text_geometry)()
+{
+    frame_text_geo.co80_mode = crtc.mcr_hires;
+    frame_text_geo.font_height = frame_text_geo.co80_mode ? 10 : 8;
+
+    frame_text_geo.num_cols = crtc.dr_horiz_displayed;
+    if (frame_text_geo.num_cols == 0)
+        frame_text_geo.num_cols = frame_text_geo.co80_mode ? 80 : 40;
+
+    frame_text_geo.font_width = (video_config && frame_text_geo.num_cols)
+        ? (video_config->screen_width / frame_text_geo.num_cols)
+        : (frame_text_geo.co80_mode ? 4 : 8);
+    if (frame_text_geo.font_width < 1)
+        frame_text_geo.font_width = 1;
+
+    frame_text_geo.num_rows = crtc.dr_vert_displayed;
+    if (frame_text_geo.num_rows == 0)
+        frame_text_geo.num_rows = 25;
+
+    frame_text_geo.max_scanline = crtc.dr_max_scan_line;
+    if (frame_text_geo.co80_mode && frame_text_geo.max_scanline == 7) {
+        frame_text_geo.max_scanline = 9;
+    }
+    if (frame_text_geo.max_scanline == 0
+        && (frame_text_geo.num_rows == 25 || crtc.dr_vert_displayed == 0)) {
+        frame_text_geo.max_scanline = frame_text_geo.font_height - 1;
+    }
+}
+
+static uint8_t __always_inline cga_retrace_bits()
+{
+    uint32_t line_pos = time_us_32() - scanline_start_time;
+
+    uint8_t vblank = (current_crtc_scanline < active_display_start
+                         || current_crtc_scanline >= active_display_end)
+        ? 1
+        : 0;
+    uint8_t vsync = (current_crtc_scanline >= active_display_end
+                        && current_crtc_scanline < (active_display_end + 16))
+        ? 1
+        : 0;
+    uint8_t hblank = (line_pos >= 48) ? 1 : 0;
+
+    return (uint8_t)(0xF0 | (vsync << 3) | (vblank | hblank));
+}
+
 void __time_critical_func(video_cga_port_in)(uint32_t port)
 {
     if (port == 0x3DA) {
-        io_ports[0x3DA] ^= 9;
+        io_ports[0x3DA] = cga_retrace_bits();
     } else if (port == 0x3D5) {
         switch (crtc.address_register) {
         case 0x0E: // Cursor Location High
@@ -46,12 +104,44 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
         crtc.address_register = io_ports[0x3D4];
     } else if (port == 0x3D5) {
         switch (crtc.address_register) {
+        case 0x00: // Horizontal Total
+            crtc.dr_horiz_total = io_ports[0x3D5];
+            break;
+
         case 0x01: // Horizontal Displayed
             crtc.dr_horiz_displayed = io_ports[0x3D5];
             break;
 
+        case 0x02: // Horizontal Sync Position
+            crtc.dr_horiz_sync_pos = io_ports[0x3D5];
+            break;
+
+        case 0x03: // Horizontal Sync Pulse Width
+            crtc.dr_horiz_sync_width = io_ports[0x3D5];
+            break;
+
+        case 0x04: // Vertical Total
+            crtc.dr_vert_total = io_ports[0x3D5];
+            break;
+
+        case 0x05: // Vertical Total Adjust
+            crtc.dr_vert_total_adjust = io_ports[0x3D5];
+            break;
+
         case 0x06: // Vertical Displayed
             crtc.dr_vert_displayed = io_ports[0x3D5];
+            break;
+
+        case 0x07: // Vertical Sync Position
+            crtc.dr_vert_sync_pos = io_ports[0x3D5];
+            break;
+
+        case 0x08: // Interlace Mode
+            crtc.dr_interlace_mode = io_ports[0x3D5];
+            break;
+
+        case 0x09: // Maximum Scan Line
+            crtc.dr_max_scan_line = io_ports[0x3D5] & 0x1F; // 5-bit field on the 6845
             break;
 
         case 0x0A: // Cursor Start Register
@@ -70,14 +160,10 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
 
         case 0x0C: // Start Address High
             crtc.dr_start_addr_high = io_ports[0x3D5];
-            // render helper
-            crtc.start_address_offset = (crtc.dr_start_addr_high << 8) | crtc.dr_start_addr_low;
             break;
 
         case 0x0D: // Start Address Low
             crtc.dr_start_addr_low = io_ports[0x3D5];
-            // render helper
-            crtc.start_address_offset = (crtc.dr_start_addr_high << 8) | crtc.dr_start_addr_low;
             break;
 
         case 0x0E: // Cursor Location High
@@ -116,218 +202,259 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
     }
 }
 
-static void __time_critical_func(render_text_mode)()
-{
-    int num_cols = crtc.dr_horiz_displayed;
-    if (num_cols == 0) {
-        num_cols = crtc.mcr_hires ? 80 : 40;
-    }
-
-    int num_rows = crtc.dr_vert_displayed;
-    if (num_rows == 0) {
-        num_rows = 25;
-    }
-
-    bool is_80_col = crtc.mcr_hires;
-    int font_height = is_80_col ? 10 : 8;
-    int font_width = is_80_col ? 4 : 8;
-
-    int output_rows = num_rows * font_height;
-    int VERTICAL_MARGIN = (video_config->screen_height > output_rows)
-        ? (video_config->screen_height - output_rows) / 2
-        : 0;
-
-    uint64_t cga_now = time_us_64();
-    bool cursor_blink = (cga_now % 533333) > 266666;
-    bool text_blink_hide = (cga_now % 1066666) >= 533333;
-
-    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
-
-    // Top margin
-    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
-        video_config->display_put_color_callback(bg_color);
-    }
-
-    for (int text_row = 0; text_row < num_rows; text_row++) {
-        for (int font_y = 0; font_y < font_height; font_y++) {
-            for (int text_col = 0; text_col < num_cols; text_col++) {
-
-                uint16_t cell_index = text_row * num_cols + text_col;
-                uint16_t abs_index = crtc.start_address_offset + cell_index;
-                uint32_t mem_offset = abs_index * 2;
-
-                uint8_t character = vram[mem_offset];
-                uint8_t color_attr = vram[mem_offset + 1];
-
-                if (crtc.cursor_visible && cursor_blink && (abs_index == crtc.cursor_offset)) {
-                    bool in_cursor_range = false;
-                    if (crtc.dr_cursor_start <= crtc.dr_cursor_end) {
-                        in_cursor_range
-                            = (font_y >= crtc.dr_cursor_start && font_y <= crtc.dr_cursor_end);
-                    } else {
-                        in_cursor_range
-                            = ((font_y >= crtc.dr_cursor_start && font_y <= (font_height - 1))
-                                || font_y <= crtc.dr_cursor_end);
-                    }
-                    if (in_cursor_range) {
-                        color_attr = ((color_attr & 0x0F) << 4) | ((color_attr & 0xF0) >> 4);
-                    }
-                }
-
-                uint8_t fg_idx = color_attr & 0x0F;
-                uint8_t bg_idx;
-                bool is_blinking = false;
-
-                // blinking or color intensity
-                if (crtc.mcr_blink_enabled) {
-                    bg_idx = (color_attr >> 4) & 0x07;
-                    is_blinking = (color_attr & 0x80) != 0;
-                } else {
-                    bg_idx = color_attr >> 4;
-                    is_blinking = false;
-                }
-
-                bool hide_foreground = is_blinking && text_blink_hide;
-                uint8_t glyph_pixels = 0;
-
-                if (is_80_col) {
-                    if (character >= 0xB0 && character <= 0xDF) {
-                        glyph_pixels = font_4x10[(character * 10) + font_y];
-                    } else {
-                        if (font_y >= 1) {
-                            glyph_pixels = font_4x10[(character * 10) + (font_y - 1)];
-                        }
-                    }
-                } else {
-                    glyph_pixels = font_8x8[(character * 8) + font_y];
-                }
-
-                for (int bit = 0; bit < font_width; bit++) {
-
-                    // Bit 3 is MSB for 4x10, Bit 7 is MSB for 8x8
-                    uint8_t msb = is_80_col ? 3 : 7;
-                    uint8_t is_foreground = (glyph_pixels >> (msb - bit)) & 1;
-
-                    uint8_t palette_idx = (is_foreground && !hide_foreground) ? fg_idx : bg_idx;
-                    uint16_t color = textmode_palette[palette_idx];
-                    video_config->display_put_color_callback(color);
-                }
-            }
-        }
-    }
-
-    // Bottom margin
-    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
-        video_config->display_put_color_callback(bg_color);
-    }
-}
-
-static void __time_critical_func(render_cga_graphics)()
-{
-    bool is_1bpp_mode = crtc.mcr_hires_graphics_mode;
-    const int OUTPUT_ROWS = 200;
-    const int VERTICAL_MARGIN = (video_config->screen_height - OUTPUT_ROWS) / 2;
-
-    // Background color (low 4 bits mapped to standard text palette)
-    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
-
-    uint8_t palette_num;
-
-    // Check if the Color Burst is disabled (MCR Bit 2) to trigger the unofficial Mode 5 palette
-    if (crtc.mcr_color_burst_disabled) {
-        palette_num = 2; // Palette 2: Cyan, Red, White
-    } else {
-        // Standard Mode 4: Bit 5 determines Palette 0 vs Palette 1
-        palette_num = (crtc.color_select_register & 0x20) ? 1 : 0;
-    }
-
-    // Intensity selection (Bit 4 determines Low vs High intensity)
-    uint8_t intensity = (crtc.color_select_register & 0x10) ? 1 : 0;
-
-    // Base palette index calculation:
-    // intensity * 12 (to skip to high intensity half) + palette_num * 4
-    uint8_t base_pal = (intensity * 12) + (palette_num * 4);
-
-    // Mode 6 uses the color_select for the foreground and Black for the background
-    uint16_t m6_fg_color = textmode_palette[crtc.color_select_register & 0x0F];
-    uint16_t m6_bg_color = textmode_palette[0]; // Black
-
-    // Top margin
-    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
-        video_config->display_put_color_callback(bg_color);
-    }
-
-    for (int out_y = 0; out_y < OUTPUT_ROWS; out_y++) {
-        int y = out_y;
-        uint32_t bank_offset = (y & 1) ? 0x2000 : 0x0000;
-        uint32_t row_offset = (y >> 1) * 80;
-
-        for (int x_byte = 0; x_byte < 80; x_byte++) {
-            // CRTC start address for hardware panning
-            uint32_t vram_offset
-                = (crtc.start_address_offset * 2) + bank_offset + row_offset + x_byte;
-            uint8_t pixel_data = vram[vram_offset & 0x3FFF]; // Mask to 16KB
-
-            if (is_1bpp_mode) {
-                for (int p = 0; p < 4; p++) {
-                    uint8_t hi = (pixel_data >> (7 - p * 2)) & 1;
-                    uint8_t lo = (pixel_data >> (6 - p * 2)) & 1;
-                    uint8_t bit = hi | lo;
-                    uint16_t color = bit ? m6_fg_color : m6_bg_color;
-                    video_config->display_put_color_callback(color);
-                }
-                continue;
-            }
-
-            uint8_t p0_val = (pixel_data >> 6) & 0x03;
-            uint8_t p1_val = (pixel_data >> 4) & 0x03;
-            uint8_t p2_val = (pixel_data >> 2) & 0x03;
-            uint8_t p3_val = (pixel_data >> 0) & 0x03;
-
-            // Pixel 0 draws the background color
-            uint16_t c0 = p0_val ? cga_palette[base_pal + p0_val] : bg_color;
-            uint16_t c1 = p1_val ? cga_palette[base_pal + p1_val] : bg_color;
-            uint16_t c2 = p2_val ? cga_palette[base_pal + p2_val] : bg_color;
-            uint16_t c3 = p3_val ? cga_palette[base_pal + p3_val] : bg_color;
-
-            video_config->display_put_color_callback(c0);
-            video_config->display_put_color_callback(c1);
-            video_config->display_put_color_callback(c2);
-            video_config->display_put_color_callback(c3);
-        }
-    }
-
-    // Bottom margin
-    for (int i = 0; i < (video_config->screen_width * VERTICAL_MARGIN); i++) {
-        video_config->display_put_color_callback(bg_color);
-    }
-}
-
 static void __always_inline video_display_reset()
 {
-    if (crtc.mcr_display_reset) {
+    if (unlikely(crtc.mcr_display_reset)) {
         video_config->display_reset_callback();
         crtc.mcr_display_reset = false;
     }
 }
 
-void video_cga_render()
+static void __time_critical_func(render_text_scanline)(int y)
 {
-    video_display_reset();
+    bool cursor_blink = (scanline_start_time % 533333) > 266666;
+    bool text_blink_hide = (scanline_start_time % 1066666) >= 533333;
 
-    if (!crtc.mcr_video_output) {
-        // maybe draw black screen?
-        return;
+    uint16_t bg_color_border = textmode_palette[crtc.color_select_register & 0x0F];
+
+    int font_height = frame_text_geo.font_height;
+    int font_width = frame_text_geo.font_width;
+
+    int source_bits = frame_text_geo.co80_mode ? 4 : 8;
+
+    int total_rows = frame_text_geo.max_scanline + 1;
+    if (total_rows < 1)
+        total_rows = 1;
+
+    int out_x = 0;
+
+    for (int x = 0; x < frame_text_geo.num_cols; x++) {
+        uint32_t mem_offset = ((ma_row_start + x) & 0x1FFF) * 2;
+
+        uint8_t character = vram[mem_offset];
+        uint8_t color_attr = vram[mem_offset + 1];
+
+        if (crtc.cursor_visible && cursor_blink
+            && (((ma_row_start + x) & 0x1FFF) == crtc.cursor_offset)) {
+            bool in_cursor_range = false;
+            if (crtc.dr_cursor_start <= crtc.dr_cursor_end) {
+                in_cursor_range = (ra >= crtc.dr_cursor_start && ra <= crtc.dr_cursor_end);
+            } else {
+                in_cursor_range = ((ra >= crtc.dr_cursor_start && ra <= (total_rows - 1))
+                    || ra <= crtc.dr_cursor_end);
+            }
+            if (in_cursor_range) {
+                color_attr = ((color_attr & 0x0F) << 4) | ((color_attr & 0xF0) >> 4);
+            }
+        }
+
+        uint8_t fg_idx = color_attr & 0x0F;
+        uint8_t bg_idx;
+        bool is_blinking = false;
+
+        if (crtc.mcr_blink_enabled) {
+            bg_idx = (color_attr >> 4) & 0x07;
+            is_blinking = (color_attr & 0x80) != 0;
+        } else {
+            bg_idx = color_attr >> 4;
+        }
+
+        bool hide_foreground = is_blinking && text_blink_hide;
+        uint8_t glyph_pixels = 0;
+
+        int scaled_row = (ra * font_height) / total_rows;
+        if (scaled_row >= font_height)
+            scaled_row = font_height - 1;
+
+        if (likely(frame_text_geo.co80_mode)) {
+            if (character >= 0xB0 && character <= 0xDF) {
+                glyph_pixels = font_4x10[(character * 10) + scaled_row];
+            } else {
+                if (scaled_row >= 1)
+                    glyph_pixels = font_4x10[(character * 10) + (scaled_row - 1)];
+            }
+        } else {
+            glyph_pixels = font_8x8[(character * 8) + scaled_row];
+        }
+
+        for (int bit = 0; bit < font_width; bit++) {
+            int src_bit = (bit * source_bits) / font_width;
+            if (src_bit >= source_bits) {
+                src_bit = source_bits - 1;
+            }
+            uint8_t msb = source_bits - 1;
+
+            uint8_t is_foreground = (glyph_pixels >> (msb - src_bit)) & 1;
+            uint8_t palette_idx = (is_foreground && !hide_foreground) ? fg_idx : bg_idx;
+
+            video_config->display_put_color_callback(textmode_palette[palette_idx]);
+            out_x++;
+        }
     }
 
-    video_config->display_begin_frame_callback();
-
-    if (crtc.mcr_graphics_mode || crtc.mcr_hires_graphics_mode) {
-        render_cga_graphics();
-    } else {
-        render_text_mode();
+    int drawn_pixels = frame_text_geo.num_cols * font_width;
+    for (int padding = drawn_pixels; padding < video_config->screen_width; padding++) {
+        video_config->display_put_color_callback(bg_color_border);
     }
 }
 
-void video_display_init() { vram = &mem[MAP_ADDR(CGA_VRAM_ADDR)]; }
-void video_set_config(Video_Config* video_cfg) { video_config = video_cfg; }
+static void __time_critical_func(render_cga_graphics_scanline)(int y)
+{
+    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
+
+    uint8_t palette_num
+        = crtc.mcr_color_burst_disabled ? 2 : ((crtc.color_select_register & 0x20) ? 1 : 0);
+    uint8_t intensity = (crtc.color_select_register & 0x10) ? 1 : 0;
+    uint8_t base_pal = (intensity * 12) + (palette_num * 4);
+
+    uint16_t m6_fg_color = textmode_palette[crtc.color_select_register & 0x0F];
+    uint16_t m6_bg_color = textmode_palette[0];
+
+    uint8_t hd = crtc.dr_horiz_displayed;
+    if (hd == 0)
+        hd = 40;
+
+    int bytes_per_row = hd * 2;
+    bool needs_downscale
+        = crtc.mcr_hires_graphics_mode && ((bytes_per_row * 8) > video_config->screen_width);
+
+    uint32_t bank_offset = (ra & 1) ? 0x2000 : 0x0000;
+    uint32_t base_vram_offset = ma_row_start * 2;
+
+    int physical_pixels = 0;
+
+    for (int x_byte = 0; x_byte < bytes_per_row; x_byte++) {
+        uint32_t vram_offset = base_vram_offset + bank_offset + x_byte;
+        uint8_t pixel_data = vram[vram_offset & 0x3FFF];
+
+        if (crtc.mcr_hires_graphics_mode) {
+            if (needs_downscale) {
+                for (int bit = 7; bit >= 1; bit -= 2) {
+                    uint8_t p1 = (pixel_data >> bit) & 1;
+                    uint8_t p2 = (pixel_data >> (bit - 1)) & 1;
+                    uint16_t color = (p1 | p2) ? m6_fg_color : m6_bg_color;
+
+                    if (physical_pixels < video_config->screen_width) {
+                        video_config->display_put_color_callback(color);
+                        physical_pixels++;
+                    }
+                }
+            } else {
+                for (int bit = 7; bit >= 0; bit--) {
+                    uint8_t pixel_bit = (pixel_data >> bit) & 1;
+                    uint16_t color = pixel_bit ? m6_fg_color : m6_bg_color;
+
+                    if (physical_pixels < video_config->screen_width) {
+                        video_config->display_put_color_callback(color);
+                        physical_pixels++;
+                    }
+                }
+            }
+        } else {
+            uint8_t p0_val = (pixel_data >> 6) & 0x03;
+            uint8_t p1_val = (pixel_data >> 4) & 0x03;
+            uint8_t p2_val = (pixel_data >> 2) & 0x03;
+            uint8_t p3_val = (pixel_data >> 0) & 0x03;
+
+            if ((physical_pixels + 4) <= video_config->screen_width) {
+                video_config->display_put_color_callback(
+                    p0_val ? cga_palette[base_pal + p0_val] : bg_color);
+                video_config->display_put_color_callback(
+                    p1_val ? cga_palette[base_pal + p1_val] : bg_color);
+                video_config->display_put_color_callback(
+                    p2_val ? cga_palette[base_pal + p2_val] : bg_color);
+                video_config->display_put_color_callback(
+                    p3_val ? cga_palette[base_pal + p3_val] : bg_color);
+                physical_pixels += 4;
+            }
+        }
+    }
+
+    uint16_t pad_color = crtc.mcr_hires_graphics_mode ? m6_bg_color : bg_color;
+    for (int padding = physical_pixels; padding < video_config->screen_width; padding++) {
+        video_config->display_put_color_callback(pad_color);
+    }
+}
+
+void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
+{
+    scanline_start_time = time_us_32();
+    current_crtc_scanline = scanline;
+
+    uint16_t bg_color_border = crtc.mcr_hires_graphics_mode
+        ? bg_color_border = textmode_palette[0]
+        : textmode_palette[crtc.color_select_register & 0x0F];
+
+    bool is_text_mode = !crtc.mcr_graphics_mode && !crtc.mcr_hires_graphics_mode;
+
+    if (current_crtc_scanline == 0) {
+        video_display_reset();
+
+        update_text_geometry();
+
+        int text_output_rows = CGA_TEXT_OUTPUT_ROWS;
+        if (is_text_mode) {
+            text_output_rows = frame_text_geo.num_rows * (frame_text_geo.max_scanline + 1);
+        }
+        if (text_output_rows > video_config->screen_height) {
+            text_output_rows = video_config->screen_height;
+        }
+
+        active_display_start = (video_config->screen_height - text_output_rows) / 2;
+        active_display_end = active_display_start + text_output_rows;
+    }
+
+    if (current_crtc_scanline == active_display_start) {
+        ma_row_start = (crtc.dr_start_addr_high << 8) | crtc.dr_start_addr_low;
+        ra = 0;
+    }
+
+    if (current_crtc_scanline < active_display_start
+        || current_crtc_scanline >= active_display_end) {
+        for (int i = 0; i < video_config->screen_width; i++) {
+            video_config->display_put_color_callback(bg_color_border);
+        }
+        return;
+    }
+
+    int active_y = current_crtc_scanline - active_display_start;
+
+    if (likely(crtc.mcr_video_output)) {
+        if (is_text_mode) {
+            render_text_scanline(active_y);
+        } else {
+            render_cga_graphics_scanline(active_y);
+        }
+
+    } else {
+        for (int i = 0; i < video_config->screen_width; i++) {
+            video_config->display_put_color_callback(bg_color_border);
+        }
+    }
+
+    uint8_t cols = 0;
+    uint8_t max_scanline = 0;
+
+    if (is_text_mode) {
+        cols = frame_text_geo.num_cols;
+        max_scanline = frame_text_geo.max_scanline;
+    } else {
+        cols = crtc.dr_horiz_displayed;
+        if (cols == 0)
+            cols = 40;
+
+        max_scanline = crtc.dr_max_scan_line;
+        if (max_scanline == 0)
+            max_scanline = 1;
+    }
+
+    if (ra >= max_scanline) {
+        ra = 0;
+        ma_row_start += cols;
+    } else {
+        ra++;
+    }
+}
+
+void pico_x86_video_display_init() { vram = &mem[MAP_ADDR(CGA_VRAM_ADDR)]; }
+void pico_x86_video_set_config(Video_Config* video_cfg) { video_config = video_cfg; }

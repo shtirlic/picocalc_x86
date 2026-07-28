@@ -66,7 +66,7 @@ static void com1_apply_config(void)
     // parity, stop_bits, brk);
 }
 
-void serial_hw_init(void)
+void pico_x86_serial_hw_init(void)
 {
     if (likely(serial_hw_ready))
         return;
@@ -81,10 +81,10 @@ void serial_hw_init(void)
     // printf("[SERIAL DEBUG] UART up: TX=%d RX=%d\n", SERIAL_TX_PIN, SERIAL_RX_PIN);
 }
 
-void __time_critical_func(serial_port_in)(uint16_t port)
+void __time_critical_func(pico_x86_serial_port_in)(uint16_t port)
 {
     if (unlikely(!serial_hw_ready))
-        serial_hw_init();
+        pico_x86_serial_hw_init();
 
     switch (port) {
     case 0x3F8: // RBR (data) or DLL, depending on DLAB
@@ -138,10 +138,10 @@ void __time_critical_func(serial_port_in)(uint16_t port)
     }
 }
 
-void __time_critical_func(serial_port_out)(uint16_t port)
+void __time_critical_func(pico_x86_serial_port_out)(uint16_t port)
 {
     if (unlikely(!serial_hw_ready))
-        serial_hw_init();
+        pico_x86_serial_hw_init();
 
     uint8_t val = io_ports[port];
 
@@ -198,7 +198,7 @@ void __time_critical_func(serial_port_out)(uint16_t port)
     }
 }
 
-void serial_ctl(void)
+void pico_x86_serial_ctl(void)
 {
     uint8_t ah = regs8[REG_AH];
     uint16_t port = regs16[REG_DX];
@@ -212,16 +212,16 @@ void serial_ctl(void)
         return;
     }
 
-    serial_hw_init();
+    pico_x86_serial_hw_init();
 
     switch (ah) {
     case 0x00: { // Initialize port: AL = line control byte
-        static const uint32_t baud_table[8] = { 110, 150, 300, 600, 1200, 2400, 4800, 9600 };
+        // static const uint32_t baud_table[8] = { 110, 150, 300, 600, 1200, 2400, 4800, 9600 };
         static const uint16_t divisor_table[8] = { 1047, 768, 384, 192, 96, 48, 24, 12 };
         uint8_t al = regs8[REG_AL];
         uint8_t baud_sel = (al >> 5) & 7;
-        uint32_t data_bits = 5 + (al & 3);
-        uint32_t stop_bits = (al & 4) ? 2 : 1;
+        // uint32_t data_bits = 5 + (al & 3);
+        // uint32_t stop_bits = (al & 4) ? 2 : 1;
         uart_parity_t parity;
 
         // INT 14h's AL only spends 2 bits (4:3) on parity, unlike
@@ -362,7 +362,7 @@ void serial_ctl(void)
     }
 }
 
-bool __time_critical_func(serial_int_pending)(void)
+bool __time_critical_func(pico_x86_serial_int_pending)(void)
 {
     bool out2_set = (com1_mcr & 0x08) != 0; // OUT2 gates the IRQ line on real 16550s
 

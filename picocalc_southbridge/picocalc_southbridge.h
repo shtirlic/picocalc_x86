@@ -10,7 +10,7 @@
 #define SB_I2C_I i2c1
 #define SB_I2C_SDA 6
 #define SB_I2C_SCL 7
-#define SB_I2C_SPEED 10000
+#define SB_I2C_SPEED 50000
 #define SB_I2C_ADDR 0x1F
 #define SB_I2C_TIMEOUT_US 10000
 

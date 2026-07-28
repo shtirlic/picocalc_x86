@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <pico/stdio.h>
 #include "picocalc_southbridge.h"
-#include <pico/time.h>
+// #include <pico/time.h>
 
 static uint8_t sb_initialized = 0;
 
@@ -80,8 +80,8 @@ uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
     // if ((time_us_64() - wait_start) < 10000)
     // return -1;
 
-    unsigned char msg[1] = { SB_REG_FIF };
-    int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
+    uint8_t msg[1] = { SB_REG_FIF };
+    uint16_t retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("picocalc_southbridge_kb_read i2c write error\n");
         return -1;
@@ -89,8 +89,7 @@ uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
     // wait_start = time_us_64();
 
     uint8_t buff[2] = { 0 };
-    retval
-        = i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, (uint8_t*)&buff, 2, false, SB_I2C_TIMEOUT_US);
+    retval = i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, buff, 2, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("picocalc_southbridge_kb_read i2c write error\n");
         return -1;
@@ -99,10 +98,6 @@ uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
     if (retval == 2 && ((buff[0] << 8) | buff[1]) != 0) {
         uint8_t key_state = buff[0];
         uint8_t key_code = buff[1];
-
-        // The FN button (raw 0xA3) (right shift) not a tracked modifier
-        if (key_code == 0xA3)
-            return -1;
 
 #ifdef DEBUG_KBD
         printf("Raw Key: %x  State: %x, Code: %x \n", (key_code), key_state,

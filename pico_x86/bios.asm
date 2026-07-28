@@ -68,8 +68,8 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Revision 0.7', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/20/26', 0, 0xfa, 0
+biosstr db	'PicoCalc x86 BIOS Revision 0.8', 0, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/27/26', 0, 0xfa, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
 
 bios_entry:
@@ -281,6 +281,14 @@ boot:	mov	ax, 0
 	mov	al, 25		; 25 rows
 	out	dx, al
 
+
+    mov	dx, 0x3d4
+	mov	al, 9		; CRTC "Maximum Scan Line"
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 7		; 8 scanlines per character for Text Mode
+	out	dx, al
+
 	mov	dx, 0x3d4
 	mov	al, 0x0C  ; start address high
 	out	dx, al
@@ -370,6 +378,12 @@ next_out:
 
 	mov	dx, 0x62	; PPI - needed for memory parity checks
 	out	dx, al
+
+    mov al, 0x36    ; PIT config
+	out 0x43, al
+	mov al, 0x00
+	out 0x40, al
+	out 0x40, al
 
     ; Get initial RTC value
 	push	cs
@@ -498,6 +512,7 @@ boot_disk:
 inta:
 
 	push	ax
+	push	dx
 	push	es
 
 	; Point ES to the BIOS Data Area (Segment 0040h)
@@ -508,10 +523,27 @@ inta:
 	add	word [es:0x6C], 1
 	adc	word [es:0x6E], 0
 
+	; Standard PC BIOS midnight rollover
+	mov	ax, [es:0x6E]
+	mov	dx, [es:0x6C]
+	cmp	ax, 0x18
+	jb	.no_rollover
+	ja	.rollover
+	cmp	dx, 0xB0
+	jb	.no_rollover
+
+  .rollover:
+	mov	word [es:0x6C], 0
+	mov	word [es:0x6E], 0
+	inc	byte [es:0x70]
+
+  .no_rollover:
+
 	; Call the standard PC INT 8 handler (which fires INT 1C for TSRs)
 	int	8
 
 	pop	es
+	pop	dx
 	pop	ax
 	iret
 
@@ -1183,7 +1215,7 @@ int1a:
 
 	iret
 
-  int1a_getsystime:
+int1a_getsystime:
 
 	push	ax
 	push	bx
@@ -1199,32 +1231,32 @@ int1a:
 
 	extended_get_rtc
 
-	mov	ax, 182  ; Clock ticks in 10 seconds
+	mov	ax, 182
 	mul	word [tm_msec]
 	mov	bx, 10000
-	div	bx ; AX now contains clock ticks in milliseconds counter
+	div	bx
 	mov	[tm_msec], ax
 
-	mov	ax, 182  ; Clock ticks in 10 seconds
+	mov	ax, 182
 	mul	word [tm_sec]
 	mov	bx, 10
 	mov	dx, 0
-	div	bx ; AX now contains clock ticks in seconds counter
+	div	bx
 	mov	[tm_sec], ax
 
-	mov	ax, 1092 ; Clock ticks in a minute
-	mul	word [tm_min] ; AX now contains clock ticks in minutes counter
+	mov	ax, 1092
+	mul	word [tm_min]
 	mov	[tm_min], ax
 
-	mov	ax, 65520 ; Clock ticks in an hour
-	mul	word [tm_hour] ; DX:AX now contains clock ticks in hours counter
+	mov	ax, 65520
+	mul	word [tm_hour]
 
-	add	ax, [tm_msec] ; Add milliseconds in to AX
-	adc	dx, 0 ; Carry into DX if necessary
-	add	ax, [tm_sec] ; Add seconds in to AX
-	adc	dx, 0 ; Carry into DX if necessary
-	add	ax, [tm_min] ; Add minutes in to AX
-	adc	dx, 0 ; Carry into DX if necessary
+	add	ax, [tm_msec]
+	adc	dx, 0
+	add	ax, [tm_sec]
+	adc	dx, 0
+	add	ax, [tm_min]
+	adc	dx, 0
 
 	push	dx
 	push	ax
@@ -1236,7 +1268,17 @@ int1a:
 	pop	bx
 	pop	ax
 
-	mov	al, 0
+	push	ds
+	push	bx
+
+	mov	bx, BDATASEG
+	mov	ds, bx
+	mov	al, [ds:0x70]
+	mov	byte [ds:0x70], 0
+
+	pop	bx
+	pop	ds
+
 	iret
 
 resync_tick_baseline:
@@ -1611,14 +1653,11 @@ iret
 
 beep:
     push ax
-    push bx
     push cx
-    push dx
 
     mov al, 0xB6
     out 0x43, al
-
-    mov ax, 0x0533          ; ~896 Hz
+    mov ax, 0x0533    ; ~896 Hz tone
     out 0x42, al
     mov al, ah
     out 0x42, al
@@ -1627,24 +1666,21 @@ beep:
     or  al, 0x03
     out 0x61, al
 
-    mov ah, 00h
-    int 1Ah
-    mov bx, dx
-    add bx, 8
+    mov dx, 4
+  .delay_outer:
+    mov cx, 0
+  .delay_inner:
+    nop
+    loop .delay_inner
 
-  .wait_loop:
-    mov ah, 00h
-    int 1Ah
-    cmp dx, bx
-    jne .wait_loop
+    dec dx
+    jnz .delay_outer
 
     in  al, 0x61
     and al, 0xFC
     out 0x61, al
 
-    pop dx
     pop cx
-    pop bx
     pop ax
     ret
 
@@ -2111,6 +2147,8 @@ bootfailstr db  'Disk boot failure', 0
 ; INT 8 millisecond counter
 
 last_int8_msec	dw	0
+
+int1a_midnight_flag	db	0
 
 ; Scratch variables for plot_char_gfx (INT 10h text output while in a CGA
 ; graphics mode - see plot_char_gfx below)

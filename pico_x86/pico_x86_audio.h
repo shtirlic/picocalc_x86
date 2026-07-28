@@ -3,13 +3,7 @@
 
 #pragma once
 
-#include "pico/stdlib.h"
-
-#define AUDIO_PIN_L 26
-#define AUDIO_PIN_R 27
-
 #define PWM_WRAP 250
 #define PWM_SAMPLE_HZ 87686
-extern uint32_t pwm_sample_hz;
 
-void picocalc_sound_init(irq_handler_t);
+void pico_x86_audio_init(uint8_t audio_pin_left, uint8_t audio_pin_right);

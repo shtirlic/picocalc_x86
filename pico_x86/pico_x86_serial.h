@@ -16,8 +16,8 @@
 
 #define DEFAULT_SERIAL_BAUDRATE 2400
 
-void serial_hw_init(void);
-void serial_port_in(uint16_t port);
-void serial_port_out(uint16_t port);
-void serial_ctl(void);
-bool serial_int_pending(void);
+void pico_x86_serial_hw_init(void);
+void pico_x86_serial_port_in(uint16_t port);
+void pico_x86_serial_port_out(uint16_t port);
+void pico_x86_serial_ctl(void);
+bool pico_x86_serial_int_pending(void);

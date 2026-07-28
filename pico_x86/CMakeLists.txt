@@ -15,7 +15,9 @@ add_library(pico_x86 INTERFACE)
 target_sources(pico_x86 INTERFACE
 	pico_x86.c
     bios_embed.S
+    pico_x86_pit.c
     pico_x86_video.c
+    pico_x86_audio.c
     pico_x86_serial.c
 )
 

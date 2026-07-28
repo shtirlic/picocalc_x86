@@ -5,6 +5,7 @@
 #include "pico/stdlib.h"
 
 #define CGA_VRAM_ADDR 0xb8000
+#define CGA_TEXT_OUTPUT_ROWS 200
 
 typedef struct __attribute__((packed, aligned(4))) {
     // Hardware Index State
@@ -44,9 +45,17 @@ typedef struct __attribute__((packed, aligned(4))) {
 
     uint8_t address_register; // Stores the last value written to 0x3D4
 
-    // Screen Geometry (Registers 0x01 and 0x06)
-    uint8_t dr_horiz_displayed; // Number of columns (characters per row)
-    uint8_t dr_vert_displayed; // Number of rows (character rows per screen)
+    // Screen Geometry (Registers 0x00 to 0x09)
+    uint8_t dr_horiz_total; // 00H: Horizontal Total
+    uint8_t dr_horiz_displayed; // 01H: Number of columns (characters per row)
+    uint8_t dr_horiz_sync_pos; // 02H: Horizontal Sync Position
+    uint8_t dr_horiz_sync_width; // 03H: Horizontal Sync Pulse Width
+    uint8_t dr_vert_total; // 04H: Vertical Total
+    uint8_t dr_vert_total_adjust; // 05H: Vertical Total Adjust
+    uint8_t dr_vert_displayed; // 06H: Number of rows (character rows per screen)
+    uint8_t dr_vert_sync_pos; // 07H: Vertical Sync Position
+    uint8_t dr_interlace_mode; // 08H: Interlace Mode
+    uint8_t dr_max_scan_line; // 09H: Maximum Scan Line
 
     // Cursor Shape & Visibility (Registers 0x0A and 0x0B)
     uint8_t dr_cursor_start; // Start scanline (usually 0-7 for CGA)
@@ -62,7 +71,6 @@ typedef struct __attribute__((packed, aligned(4))) {
 
     // Renderer Helpers
     uint16_t cursor_offset; // Combined 16-bit linear offset (High << 8 | Low)
-    uint16_t start_address_offset; // Combined Start Address offset
     bool cursor_visible; // True if hardware disable bit is NOT set
 
     // CGA Bios Modes
@@ -72,13 +80,13 @@ typedef struct __attribute__((packed, aligned(4))) {
     //   3 - 80x25 alpha                                00101001b (29H)
     //   4 - 320x200 graphics                           00101010b (2AH)
     //   5 - 320x200 graphics (color burst disabled)    00101110b (2EH)
-    //   6 - 640x200 graphics                           00011100b (1CH)
+    //   6 - 640x200 graphics                           00011110b (1EH)
     //   7 - 80x25 alpha (MDA only)                     00101001b (29H)
     // 11H - 640x480 graphics (MCGA only)               00011000b (18H)
 
     // CGA Mode Control (Port 0x3D8) 40:0065
     bool mcr_display_reset; // bit 7 display reset / custom
-
+                            // bit 6 not used
     bool mcr_blink_enabled; // bit 5 blinking attribute
     bool mcr_hires_graphics_mode; // bit 4 true if 640-wide graphics modes/ false  all other
     bool mcr_video_output; // bit 3 true video enabled / false screen blank
@@ -163,6 +171,15 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 } Video_Config;
 
-void video_display_init(void);
-void video_cga_render(void);
-void video_set_config(Video_Config* video_cfg);
+typedef struct __attribute__((packed, aligned(4))) {
+    bool co80_mode;
+    int font_height;
+    int font_width;
+    uint8_t num_cols;
+    uint8_t num_rows;
+    uint8_t max_scanline;
+} TextGeometry;
+
+void pico_x86_video_display_init(void);
+void pico_x86_video_set_config(Video_Config* video_cfg);
+void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline);

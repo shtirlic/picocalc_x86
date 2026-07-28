@@ -17,7 +17,7 @@
 #include "picocalc_display.h"
 #include "picocalc_display.pio.h"
 
-#define SERIAL_CLK_DIV 1.5f
+#define SERIAL_CLK_DIV 1.6f
 #define MADCTL_BGR_PIXEL_ORDER (1 << 3)
 #define MADCTL_ROW_COLUMN_EXCHANGE (1 << 5)
 #define MADCTL_COLUMN_ADDRESS_ORDER_SWAP (1 << 6)
@@ -162,23 +162,6 @@ static void lcd_init(const uint8_t* seq)
     lcd_set_window(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
-static void __always_inline start_pixels()
-{
-    const uint8_t cmd = 0x2c; // RAMWR
-    lcd_write_cmd(&cmd, 1);
-    lcd_set_dc_cs(1, 0);
-}
-
-[[maybe_unused]] static void test_pattern()
-{
-    start_pixels();
-    for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++) {
-        picocalc_display_put(pio, sm_video_output, 0x00);
-        picocalc_display_put(pio, sm_video_output, 0x1F);
-    }
-    sleep_ms(1000);
-}
-
 void picocalc_display_init()
 {
     gpio_init(TFT_CS_PIN);
@@ -198,6 +181,23 @@ void picocalc_display_init()
 
     lcd_init(init_seq);
 }
+static void __always_inline start_pixels()
+{
+    // st7789_set_pixel_mode(pio, sm_video_output, 0);
+    const uint8_t cmd = 0x2c; // RAMWR
+    lcd_write_cmd(&cmd, 1);
+    lcd_set_dc_cs(1, 0);
+}
+
+[[maybe_unused]] static void test_pattern()
+{
+    start_pixels();
+    for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++) {
+        picocalc_display_put(pio, sm_video_output, 0x00);
+        picocalc_display_put(pio, sm_video_output, 0x1F);
+    }
+    sleep_ms(1000);
+}
 
 // Basic show for bitmaps
 void picocalc_display_show_image(const uint8_t* image, size_t size)
@@ -208,11 +208,27 @@ void picocalc_display_show_image(const uint8_t* image, size_t size)
     }
 }
 
-void __time_critical_func(picocalc_display_begin_frame)() { start_pixels(); }
-void __time_critical_func(picocalc_display_reset)() { lcd_init(init_seq); }
+void __time_critical_func(picocalc_display_begin_frame)()
+{
+    start_pixels();
+    st7789_set_pixel_mode(pio, sm_video_output, 1);
+}
+void __time_critical_func(picocalc_display_reset)()
+{
+    st7789_set_pixel_mode(pio, sm_video_output, 0);
+    lcd_init(init_seq);
+}
 
 void __time_critical_func(picocalc_display_put_color)(uint16_t color)
 {
-    picocalc_display_put(pio, sm_video_output, color >> 8);
-    picocalc_display_put(pio, sm_video_output, color & 0xFF);
+    picocalc_display_put_pixel(pio, sm_video_output, color);
+    // picocalc_display_put(pio, sm_video_output, color >> 8);
+    // picocalc_display_put(pio, sm_video_output, color & 0xFF);
+}
+
+void __time_critical_func(picocalc_display_put_scanline)(const uint16_t* pixels, uint16_t count)
+{
+    for (uint16_t i = 0; i < count; i++) {
+        picocalc_display_put_pixel(pio, sm_video_output, pixels[i]);
+    }
 }

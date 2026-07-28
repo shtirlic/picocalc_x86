@@ -96,6 +96,13 @@ int10:
 	mov	al, 25		; 25 rows
 	out	dx, al
 
+    mov	dx, 0x3d4
+	mov	al, 9		; CRTC "Maximum Scan Line"
+	out	dx, al
+	mov	dx, 0x3d5
+    mov	al, 7		; 8 scanlines per character for Text Mode
+	out	dx, al
+
 	mov	dx, 0x3d4
 	mov	al, 0x0C  ; start address high
 	out	dx, al
@@ -180,6 +187,13 @@ int10_switch_to_cga_gfx:
 	mov	al, 0x64	; 100 character rows (CGA hardware draws 2 scanlines per row = 200 pixels)
 	out	dx, al
 
+    mov	dx, 0x3d4
+	mov	al, 9		; CRTC "Maximum Scan Line"
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 1		; 2 scanlines per character row for CGA Graphics
+	out	dx, al
+
 	mov	dx, 0x3d4
 	mov	al, 0x0C  ; start address high
 	out	dx, al
@@ -209,9 +223,8 @@ int10_switch_to_cga_gfx:
     ; 2. Calculate the -14 (0x0E) offset for Mode 6
     and ah, 2               ; Isolate Bit 1 (Yields 2 for Mode 6, 0 for 4/5)
     neg ah                  ; Mathematical trick: 2 becomes 0xFE (-2). 0 stays 0.
-    and ah, 0x0E            ; Mask it: 0xFE & 0x0E becomes 0x0E (14). 0 stays 0.
-    sub al, ah              ; Subtract: Mode 6 does 0x2A - 0x0E = 0x1C.
-
+    and ah, 0x0C            ; Mask it: 0xFE & 0x0C becomes 0x0C (12). 0 stays 0.
+    sub al, ah              ; Subtract: Mode 6 does 0x2A - 0x0C = 0x1E.
     out dx, al
     mov [es:0x65], al
 

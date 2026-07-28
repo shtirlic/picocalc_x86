@@ -41,4 +41,5 @@ void picocalc_display_init(void);
 void __time_critical_func(picocalc_display_reset)(void);
 void __time_critical_func(picocalc_display_begin_frame)(void);
 void __time_critical_func(picocalc_display_put_color)(uint16_t color);
+void __time_critical_func(picocalc_display_put_scanline)(const uint16_t* pixels, uint16_t count);
 void picocalc_display_show_image(const uint8_t* image, size_t size);

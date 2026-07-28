@@ -132,8 +132,8 @@ enum flag_update_type {
     FLAGS_UPDATE_OC_LOGIC = 4 // Clear Overflow and Carry (Logic ops).
 };
 
-extern uint16_t picocalc_southbridge_kb_read();
+extern uint16_t picocalc_southbridge_kb_read(void);
 
-void pico_x86_run();
-void pico_x86_cpu();
-void pico_x86_timer_tick();
+void pico_x86_run(void);
+void pico_x86_cpu(void);
+void pico_x86_timer_tick(void);

@@ -31,7 +31,6 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/rp2040-psram rp2040-psram)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_fatfs pico_fatfs)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_display picocalc_display)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_southbridge picocalc_southbridge)
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_sound picocalc_sound)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_x86 pico_x86)
 
 add_executable(picocalc_x86 picocalc_x86.c)
@@ -46,11 +45,12 @@ target_compile_definitions(picocalc_x86 PRIVATE
     PSRAM_PIN_SCK=21
     PSRAM_PIN_MOSI=2
     PSRAM_PIN_MISO=3
-    TFT_CS_PIN=13 TFT_RST_PIN=15 TFT_LED_PIN=9 TFT_DC_PIN=14 TFT_DATA_PIN=11 TFT_CLK_PIN=10
+    AUDIO_PIN_L=26
+    AUDIO_PIN_R=27
     BIOS_EMBED
     # DEBUG_PERF
     # DEBUG_KBD
-    DEBUG_CONSOLE
+    # DEBUG_CONSOLE
 )
 
 target_compile_options(picocalc_x86 PRIVATE
@@ -58,6 +58,10 @@ target_compile_options(picocalc_x86 PRIVATE
 	-funroll-loops
 	-fomit-frame-pointer
     --param max-inline-insns-auto=200
+    -Wall
+    -Wno-unused-value
+    -Wno-unused-but-set-variable
+    -Wno-unused-variable
 )
 
 target_link_options(picocalc_x86 PRIVATE
@@ -86,10 +90,9 @@ target_link_libraries(picocalc_x86
     pico_x86
     picocalc_display
 	picocalc_southbridge
-    picocalc_sound
 	)
 
-pico_enable_stdio_usb(picocalc_x86 1)
+pico_enable_stdio_usb(picocalc_x86 0)
 pico_enable_stdio_uart(picocalc_x86 0)
 pico_add_extra_outputs(picocalc_x86)
 
