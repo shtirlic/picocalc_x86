@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "hardware/sync.h"
 #include "pico/aon_timer.h"
 #include "pico/time.h"
 
@@ -27,14 +28,14 @@ uint8_t __aligned(4) mem[RAM_SIZE + 16];
 
 uint8_t __aligned(4) __scratch_y("io") io_ports[IO_PORT_COUNT];
 
-typedef struct __attribute__((packed, aligned(4))) {
+typedef struct __attribute__((aligned(2))) {
     uint8_t xlat_id;
     uint8_t subfunction;
     uint8_t flags;
     uint8_t mod_size;
 } opcode_decode_t;
 
-typedef struct __attribute__((packed, aligned(2))) {
+typedef struct __attribute__((aligned(2))) {
     uint8_t base_size;
     uint8_t w_size;
 } inst_size_t;
@@ -54,23 +55,28 @@ uint8_t __scratch_y("cpu") jmp_decode_table[4][8];
 static uint8_t* opcode_stream asm("s5");
 static uint32_t raw_opcode_id asm("s6");
 static uint32_t seg_override_en asm("s7");
+static uint32_t i_rm asm("s8");
+static uint32_t i_w asm("s9");
+static uint32_t i_reg asm("s10");
 
 uint8_t* __scratch_y("cpu") regs8;
 uint16_t* __scratch_y("cpu") regs16;
 
-uint32_t __scratch_y("cpu") i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit,
+static uint32_t __scratch_y("cpu") i_mod, i_mod_size, i_d, i_reg4bit,
     xlat_opcode_id, extra, rep_mode, rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en;
 
 static uint32_t __scratch_y("cpu") int8_asap = 0;
 
-uint16_t __scratch_y("cpu") reg_ip, seg_override;
+static uint16_t __scratch_y("cpu") reg_ip, seg_override;
 
 uint32_t __scratch_y("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint, set_flags_type;
-int32_t __scratch_y("cpu") op_result, disk[3], scratch_int;
+static int32_t __scratch_y("cpu") op_result, disk[3], scratch_int;
 
 struct timespec __scratch_y() ts;
 struct tm __scratch_y() clock_tm;
+
+static bool __scratch_y() isr_ready;
 
 // Helper macros
 
@@ -189,15 +195,15 @@ static void __always_inline(make_flags)()
 // Set emulated CPU FLAGS register from regs8[FLAG_xx] values
 static void __always_inline set_flags(int new_flags)
 {
-    regs8[FLAG_CF] = !!(new_flags & (1 << 0));
-    regs8[FLAG_PF] = !!(new_flags & (1 << 2));
-    regs8[FLAG_AF] = !!(new_flags & (1 << 4));
-    regs8[FLAG_ZF] = !!(new_flags & (1 << 6));
-    regs8[FLAG_SF] = !!(new_flags & (1 << 7));
-    regs8[FLAG_TF] = !!(new_flags & (1 << 8));
-    regs8[FLAG_IF] = !!(new_flags & (1 << 9));
-    regs8[FLAG_DF] = !!(new_flags & (1 << 10));
-    regs8[FLAG_OF] = !!(new_flags & (1 << 11));
+    regs8[FLAG_CF] = !!(new_flags & BIT(0));
+    regs8[FLAG_PF] = !!(new_flags & BIT(2));
+    regs8[FLAG_AF] = !!(new_flags & BIT(4));
+    regs8[FLAG_ZF] = !!(new_flags & BIT(6));
+    regs8[FLAG_SF] = !!(new_flags & BIT(7));
+    regs8[FLAG_TF] = !!(new_flags & BIT(8));
+    regs8[FLAG_IF] = !!(new_flags & BIT(9));
+    regs8[FLAG_DF] = !!(new_flags & BIT(10));
+    regs8[FLAG_OF] = !!(new_flags & BIT(11));
 }
 
 // Convert raw opcode to translated opcode index. This condenses a large number
@@ -222,7 +228,7 @@ static char __time_critical_func(pc_interrupt)(uint8_t interrupt_num)
     R_M_PUSH(regs16[REG_CS]);
     R_M_PUSH(reg_ip);
     MEM_OP(REGS_BASE + (REG_CS << 1), =, (interrupt_num << 2) + 2);
-    R_M_OP(reg_ip, =, mem[4 * interrupt_num]);
+    R_M_OP(reg_ip, =, mem[interrupt_num << 2]);
 
     // if (interrupt_num == 0x10 && regs8[REG_AH] != 0x0E) {
     //     printf("Int: %x, AH=%x AL=%x \n", interrupt_num, regs8[REG_AH], regs8[REG_AL]);
@@ -283,6 +289,19 @@ void __always_inline pico_x86_timer_tick()
 {
     if (int8_asap < 0xFF)
         int8_asap++;
+}
+
+static void __always_inline __isr isr()
+{
+    if ((int8_asap)) {
+        pc_interrupt(0xA);
+        int8_asap--;
+        if (int8_asap == 0) {
+            keyboard_process();
+        }
+    } else if (unlikely(pico_x86_serial_int_pending())) {
+        pc_interrupt(0x0C); // Trigger IRQ 4
+    }
 }
 
 void pico_x86_run()
@@ -393,12 +412,13 @@ void pico_x86_run()
 void pico_x86_cpu()
 {
     //  GOTO Dispatch Table
-    static const void* __scratch_y("cpu") dispatch_table[49] = { &&OP_0, &&OP_1, &&OP_2, &&OP_3,
-        &&OP_4, &&OP_5, &&OP_6, &&OP_7, &&OP_8, &&OP_9, &&OP_10, &&OP_11, &&OP_12, &&OP_13, &&OP_14,
-        &&OP_15, &&OP_16, &&OP_17, &&OP_18, &&OP_19, &&OP_20, &&OP_21, &&OP_22, &&OP_23, &&OP_24,
-        &&OP_25, &&OP_26, &&OP_27, &&OP_28, &&OP_29, &&OP_30, &&OP_31, &&OP_32, &&OP_33, &&OP_34,
-        &&OP_35, &&OP_36, &&OP_37, &&OP_38, &&OP_39, &&OP_40, &&OP_41, &&OP_42, &&OP_43, &&OP_44,
-        &&OP_45, &&OP_46, &&OP_47, &&OP_48 };
+    static const void* __scratch_y("cpu") dispatch_table[56]
+        = { &&OP_0, &&OP_1, &&OP_2, &&OP_3, &&OP_4, &&OP_5, &&OP_6, &&OP_7, &&OP_8, &&OP_9, &&OP_10,
+              &&OP_11, &&OP_12, &&OP_13, &&OP_14, &&OP_15, &&OP_16, &&OP_17, &&OP_18, &&OP_19,
+              &&OP_20, &&OP_21, &&OP_22, &&OP_23, &&OP_24, &&OP_25, &&OP_26, &&OP_27, &&OP_28,
+              &&OP_29, &&OP_30, &&OP_31, &&OP_32, &&OP_33, &&OP_34, &&OP_35, &&OP_36, &&OP_37,
+              &&OP_38, &&OP_39, &&OP_40, &&OP_41, &&OP_42, &&OP_43, &&OP_44, &&OP_45, &&OP_46,
+              &&OP_47, &&OP_48, &&OP_NOP, &&OP_NOP, &&OP_51, &&OP_NOP, &&OP_53, &&OP_54, &&OP_NOP };
 
 start:
     // Instruction execution loop
@@ -447,7 +467,7 @@ start:
         DECODE_RM_REG;
     }
 
-    if (unlikely(xlat_opcode_id >= 49)) {
+    if (unlikely(xlat_opcode_id >= count_of(dispatch_table))) {
         goto OP_NOP;
     }
 
@@ -1043,6 +1063,50 @@ OP_48: // Emulator-specific 0F xx opcodes
     }
     }
     NEXT_OP;
+OP_51:
+    scratch_uint = regs16[REG_SP];
+    R_M_PUSH(regs16[REG_AX]);
+    R_M_PUSH(regs16[REG_CX]);
+    R_M_PUSH(regs16[REG_DX]);
+    R_M_PUSH(regs16[REG_BX]);
+    R_M_PUSH(scratch_uint);
+    R_M_PUSH(regs16[REG_BP]);
+    R_M_PUSH(regs16[REG_SI]);
+    R_M_PUSH(regs16[REG_DI]);
+    NEXT_OP;
+
+OP_53:
+    switch (raw_opcode_id) {
+    case 0x9B: // WAIT
+        break;
+    case 0xD8: // FPU ESC
+    case 0xD9:
+    case 0xDA:
+    case 0xDB:
+    case 0xDC:
+    case 0xDD:
+    case 0xDE:
+    case 0xDF:
+        break;
+    case 0xF0: // LOCK
+        break;
+    case 0xF4: // HLT
+        if (regs8[FLAG_IF]) {
+            __wfi();
+        }
+        break;
+    }
+    goto OP_NOP;
+OP_54:
+    R_M_POP(regs16[REG_DI]);
+    R_M_POP(regs16[REG_SI]);
+    R_M_POP(regs16[REG_BP]);
+    regs16[REG_SP] += 2;
+    R_M_POP(regs16[REG_BX]);
+    R_M_POP(regs16[REG_DX]);
+    R_M_POP(regs16[REG_CX]);
+    R_M_POP(regs16[REG_AX]);
+    NEXT_OP;
 OP_NOP: // Catch for unimplemented opcodes
     NEXT_OP;
 
@@ -1082,14 +1146,10 @@ next_opcode:
     // overrides/REP are active, then process the tick and check for new
     // keystrokes
     // At the end of the loop:
-    if ((!seg_override_en && !rep_override_en && regs8[FLAG_IF] && !regs8[FLAG_TF])) {
-        if ((int8_asap)) {
-            pc_interrupt(0xA);
-            int8_asap--;
-            keyboard_process();
-        } else if (unlikely(pico_x86_serial_int_pending())) {
-            pc_interrupt(0x0C); // Trigger IRQ 4
-        }
+
+    isr_ready = !seg_override_en && !rep_override_en && regs8[FLAG_IF] && !trap_flag;
+    if ((isr_ready)) {
+        isr();
     }
 
 #ifdef DEBUG_PERF

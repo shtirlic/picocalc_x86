@@ -19,6 +19,10 @@
 #define hweight32(w) __builtin_popcount((uint32_t)(w))
 
 #define BIT(nr) (1UL << (nr))
+#define BIT_SET(value, bit) ((value) |= BIT(bit))
+#define BIT_CLEAR(value, bit) ((value) &= ~BIT(bit))
+#define BIT_TOGGLE(value, bit) ((value) ^= BIT(bit))
+#define BIT_READ(value, bit) (((value) & BIT(bit)) != 0)
 
 // Extracts bits from 'high' down to 'low' (inclusive)
 #ifdef __hazard3_extension_xh3bextm
