@@ -8,21 +8,21 @@
  * Licensed under GPLv3 for the combined work.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "pico/stdlib.h"
 #include "hardware/sync.h"
 #include "pico/aon_timer.h"
-#include "pico/time.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "ff.h"
 #include "picocalc_southbridge.h"
 
 #include "pico_x86.h"
-#include "pico_x86_video.h"
-#include "pico_x86_serial.h"
 #include "pico_x86_floppy.h"
+#include "pico_x86_keyb.h"
 #include "pico_x86_pit.h"
+#include "pico_x86_serial.h"
+#include "pico_x86_video.h"
 
 uint8_t __aligned(4) mem[RAM_SIZE + 16];
 
@@ -94,7 +94,7 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 // Return memory-mapped register location (offset into mem array) for register
 // #reg_id
 #define GET_REG_ADDR(reg_id)                                                                       \
-    (REGS_BASE + (i_w ? (reg_id << 1) : ((reg_id << 1) + (reg_id >> 2)) & 7))
+    (REGS_BASE + (i_w ? ((reg_id) << 1) : (((reg_id) << 1) + ((reg_id) >> 2)) & 7))
 
 // Decode mod, r_m and reg fields in instruction
 #define DECODE_RM_REG                                                                              \
@@ -118,7 +118,7 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 // [I]MUL/[I]DIV/DAA/DAS/ADC/SBB helpers
 #define MUL_MACRO(op_data_type, out_regs)                                                          \
     (set_opcode(0x10),                                                                             \
-        out_regs[i_w + 1]                                                                          \
+        (out_regs)[i_w + 1]                                                                        \
         = (op_result = CAST(op_data_type) mem[rm_addr] * (op_data_type) * out_regs) >> 16,         \
         regs16[REG_AX] = op_result, set_OF(set_CF(op_result - (op_data_type)op_result)))
 #define DIV_MACRO(out_data_type, in_data_type, out_regs)                                           \
@@ -142,9 +142,9 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 
 // Execute arithmetic/logic operations in emulator memory/registers
 #define R_M_OP(dest, op, src)                                                                      \
-    (i_w ? op_dest = CAST(uint16_t) dest,                                                          \
+    (i_w ? op_dest = CAST(uint16_t)(dest),                                                         \
         op_result = CAST(uint16_t) dest op(op_source = CAST(uint16_t) src)                         \
-         : (op_dest = dest, op_result = dest op(op_source = CAST(uint8_t) src)))
+         : (op_dest = (dest), op_result = dest op(op_source = CAST(uint8_t) src)))
 #define MEM_OP(dest, op, src) R_M_OP(mem[dest], op, mem[src])
 #define OP(op) MEM_OP(op_to_addr, op, op_from_addr)
 
@@ -165,22 +165,22 @@ typedef uint32_t __attribute__((aligned(1), may_alias)) unaligned_uint32_t;
 // Helper functions
 
 // Set carry flag
-static char __always_inline set_CF(int new_CF) { return regs8[FLAG_CF] = !!new_CF; }
+static uint8_t __always_inline set_CF(uint32_t new_CF) { return regs8[FLAG_CF] = !!new_CF; }
 
 // Set auxiliary flag
-static char __always_inline set_AF(int new_AF) { return regs8[FLAG_AF] = !!new_AF; }
+static uint8_t __always_inline set_AF(uint32_t new_AF) { return regs8[FLAG_AF] = !!new_AF; }
 
 // Set overflow flag
-static char __always_inline set_OF(int new_OF) { return regs8[FLAG_OF] = !!new_OF; }
+static uint8_t __always_inline set_OF(uint32_t new_OF) { return regs8[FLAG_OF] = !!new_OF; }
 
 // Set auxiliary and overflow flag after arithmetic operations
-static char __always_inline set_AF_OF_arith()
+static uint8_t __always_inline set_AF_OF_arith()
 {
     set_AF((op_source ^= op_dest ^ op_result) & 0x10);
-    if (op_result == op_dest)
+    if (op_result == op_dest) {
         return set_OF(0);
-    else
-        return set_OF(1 & (regs8[FLAG_CF] ^ op_source >> (TOP_BIT - 1)));
+    }
+    return set_OF(1 & (regs8[FLAG_CF] ^ op_source >> (TOP_BIT - 1)));
 }
 
 // Assemble and return emulated CPU FLAGS register in scratch_uint
@@ -193,7 +193,7 @@ static void __always_inline(make_flags)()
 }
 
 // Set emulated CPU FLAGS register from regs8[FLAG_xx] values
-static void __always_inline set_flags(int new_flags)
+static void __always_inline set_flags(uint32_t new_flags)
 {
     regs8[FLAG_CF] = !!(new_flags & BIT(0));
     regs8[FLAG_PF] = !!(new_flags & BIT(2));
@@ -247,7 +247,7 @@ static int __always_inline AAA_AAS(char which_operation)
 // PicoCalc specific keyboard handling
 static void keyboard_process()
 {
-    uint16_t kbd_event = picocalc_southbridge_kb_read();
+    int32_t kbd_event = picocalc_southbridge_kb_read();
     if (unlikely(kbd_event != -1)) {
         uint8_t scancode = kbd_event & 0xFF;
 
@@ -272,8 +272,8 @@ static void keyboard_process()
 }
 
 extern FATFS fs;
-extern const uint8_t _binary_bios_bin_start[];
-extern const uint8_t _binary_bios_bin_end[];
+extern const uint8_t binary_bios_bin_start[];
+extern const uint8_t binary_bios_bin_end[];
 
 #ifdef DEBUG_PERF
 static uint64_t start_time = 0;
@@ -287,8 +287,9 @@ static uint8_t floppy_present = 0;
 
 void __always_inline pico_x86_timer_tick()
 {
-    if (int8_asap < 0xFF)
+    if (int8_asap < 0xFF) {
         int8_asap++;
+    }
 }
 
 static void __always_inline __isr isr()
@@ -336,9 +337,9 @@ void pico_x86_run()
     }
     f_close(&fpb);
 #else
-    size_t bios_size = (size_t)(_binary_bios_bin_end - _binary_bios_bin_start);
-    printf("\n▼ BIOS found in Flash at 0x%p, size: %zu bytes\n", _binary_bios_bin_start, bios_size);
-    memcpy(regs8 + (reg_ip = 0x100), _binary_bios_bin_start, bios_size);
+    size_t bios_size = (size_t)(binary_bios_bin_end - binary_bios_bin_start);
+    printf("\n▼ BIOS found in Flash at 0x%p, size: %zu bytes\n", binary_bios_bin_start, bios_size);
+    memcpy(regs8 + (reg_ip = 0x100), binary_bios_bin_start, bios_size);
 #endif
 
     fr = f_open(&fpd, "0:/x86/hd.img", FA_READ | FA_WRITE);
@@ -346,16 +347,16 @@ void pico_x86_run()
         printf("\n[FATAL ERROR] disk image is missing, empty, or SD card failed! "
                "FATFS Code: %d\n",
             fr);
-        while (1)
-            ;
+        while (1) { }
     } else {
         printf("▼ DISK Image Size: %llu bytes\n", fpd.obj.objsize);
     }
 
     fr = f_open(&fpfd, FDD_IMAGE_PATH, FA_READ | FA_WRITE);
     if (fr != FR_OK || f_size(&fpfd) == 0) {
-        if (fr == FR_OK)
+        if (fr == FR_OK) {
             f_close(&fpfd);
+        }
         printf("▼ No floppy image found, creating blank 1.44MB floppy image\n");
         create_blank_floppy_image();
         fr = f_open(&fpfd, FDD_IMAGE_PATH, FA_READ | FA_WRITE);
@@ -380,27 +381,24 @@ void pico_x86_run()
             uint8_t val = regs8[table_addr + j];
 
             // ModR/M tables (0-7): only need 8 entries
-            if (i < 8 && j < 8)
+            if (i < 8 && j < 8) {
                 rm_decode_table[i][j] = val;
-
-            // Opcode decode (Tables 8, 9, 10, 14)
-            else if (i == TABLE_XLAT_OPCODE)
+                // Opcode decode (Tables 8, 9, 10, 14)
+            } else if (i == TABLE_XLAT_OPCODE) {
                 op_decode_table[j].xlat_id = val;
-            else if (i == TABLE_XLAT_SUBFUNCTION)
+            } else if (i == TABLE_XLAT_SUBFUNCTION) {
                 op_decode_table[j].subfunction = val;
-            else if (i == TABLE_STD_FLAGS)
+            } else if (i == TABLE_STD_FLAGS) {
                 op_decode_table[j].flags = val;
-            else if (i == TABLE_I_MOD_SIZE)
+            } else if (i == TABLE_I_MOD_SIZE) {
                 op_decode_table[j].mod_size = val;
-
-            // Instruction size decode (Tables 12, 13)
-            else if (i == TABLE_BASE_INST_SIZE)
+                // Instruction size decode (Tables 12, 13)
+            } else if (i == TABLE_BASE_INST_SIZE) {
                 inst_size_table[j].base_size = val;
-            else if (i == TABLE_I_W_SIZE)
+            } else if (i == TABLE_I_W_SIZE) {
                 inst_size_table[j].w_size = val;
-
-            // Jump logic tables (15-18): only need 8 entries
-            else if (i >= TABLE_COND_JUMP_DECODE_A && i <= TABLE_COND_JUMP_DECODE_D && j < 8) {
+                // Jump logic tables (15-18): only need 8 entries
+            } else if (i >= TABLE_COND_JUMP_DECODE_A && i <= TABLE_COND_JUMP_DECODE_D && j < 8) {
                 jmp_decode_table[i - TABLE_COND_JUMP_DECODE_A][j] = val;
             }
         }
@@ -425,8 +423,9 @@ start:
     opcode_stream = mem + MAP_ADDR((regs16[REG_CS] << 4) + reg_ip);
 
     // Terminates if CS:IP = 0:0
-    if (unlikely(opcode_stream == mem))
+    if (unlikely(opcode_stream == mem)) {
         goto exit_emulation;
+    }
 
     set_opcode(*opcode_stream);
 
@@ -451,18 +450,19 @@ start:
 
     // i_mod_size > 0 indicates that opcode uses i_mod/i_rm/i_reg, so decode
     // them
-    if (i_mod_size) {
+    if (i_mod_size > 0) {
         i_mod = EXTRACT_BITS(i_data0, 7, 6);
         i_reg = EXTRACT_BITS(i_data0, 5, 3);
         i_rm = i_data0 & 0x7;
 
-        if ((!i_mod && i_rm == 6) || (i_mod == 2))
+        if ((!i_mod && i_rm == 6) || (i_mod == 2)) {
             i_data2 = CAST(int16_t) opcode_stream[4];
-        else if (i_mod != 1)
+        } else if (i_mod != 1) {
             i_data2 = i_data1;
-        else // If i_mod is 1, operand is (usually) 8 bits rather than 16
-             // bits
+        } else { // If i_mod is 1, operand is (usually) 8 bits rather than 16
+            // bits
             i_data1 = (int8_t)i_data1;
+        }
 
         DECODE_RM_REG;
     }
@@ -543,6 +543,8 @@ OP_6: // TEST r/m, imm16 / NOT|NEG|MUL|IMUL|DIV|IDIV reg
     case 7:
         i_w ? DIV_MACRO(int16_t, int32_t, regs16) : DIV_MACRO(int8_t, int16_t, regs8);
         break;
+    default:
+        break;
     }
     NEXT_OP;
 OP_7: // ADD|OR|ADC|SBB|AND|SUB|XOR|CMP AL/AX, immed
@@ -555,7 +557,7 @@ OP_7: // ADD|OR|ADC|SBB|AND|SUB|XOR|CMP AL/AX, immed
 OP_8: // ADD|OR|ADC|SBB|AND|SUB|XOR|CMP reg, immed
     op_to_addr = rm_addr;
     regs16[REG_SCRATCH] = (i_d |= !i_w) ? (int8_t)i_data2 : i_data2;
-    op_from_addr = REGS_BASE + 2 * REG_SCRATCH;
+    op_from_addr = REGS_BASE + (2 * REG_SCRATCH);
     reg_ip += !i_d + 1;
     set_opcode(0x08 * (extra = i_reg));
     /* Fallthrough */
@@ -596,6 +598,8 @@ OP_9: // ADD|OR|ADC|SBB|AND|SUB|XOR|CMP|MOV reg, r/m
         //         %c\n", rm_addr,
         //                val, (val >= 32 && val < 127) ? val : '.');
         //       }
+        break;
+    default:
         break;
     }
     NEXT_OP;
@@ -673,6 +677,8 @@ OP_12: // ROL|ROR|RCL|RCR|SHL|SHR|???|SAR reg/mem, 1/CL/imm
         set_OF(0);
         R_M_OP(mem[rm_addr], +=, scratch2_uint *= ~((BIT(TOP_BIT) - 1) >> scratch_uint));
         break;
+    default:
+        break;
     }
     NEXT_OP;
 OP_13: // LOOPxx|JCZX
@@ -687,7 +693,10 @@ OP_13: // LOOPxx|JCZX
     case 3:
         scratch_uint = !++regs16[REG_CX];
         break;
+    default:
+        break;
     }
+
     reg_ip += scratch_uint * (int8_t)i_data0;
     NEXT_OP;
 OP_14: // JMP | CALL short/near
@@ -742,8 +751,9 @@ OP_17: // MOVSx|STOSx|LODSx
         extra & 1 || INDEX_INC(REG_SI);
         extra & 2 || INDEX_INC(REG_DI);
     }
-    if (rep_override_en)
+    if (rep_override_en) {
         regs16[REG_CX] = 0;
+    }
     NEXT_OP;
 OP_18: // CMPSx|SCASx
     scratch2_uint = seg_override_en ? seg_override : REG_DS;
@@ -753,7 +763,7 @@ OP_18: // CMPSx|SCASx
                 extra ? REGS_BASE : SEGREG(scratch2_uint, REG_SI, ), -, SEGREG(REG_ES, REG_DI, ));
             extra || INDEX_INC(REG_SI);
             INDEX_INC(REG_DI);
-            rep_override_en && !(--regs16[REG_CX] && (!op_result == rep_mode))
+            rep_override_en && !(--regs16[REG_CX] && ((!op_result) == rep_mode))
                 && (scratch_uint = 0);
         }
         set_flags_type = FLAGS_UPDATE_SZP | FLAGS_UPDATE_AO_ARITH;
@@ -763,12 +773,14 @@ OP_18: // CMPSx|SCASx
 OP_19: // RET|RETF|IRET
     i_d = i_w;
     R_M_POP(reg_ip);
-    if (extra)
+    if (extra) {
         R_M_POP(regs16[REG_CS]);
-    if (extra & 2)
+    }
+    if (extra & 2) {
         set_flags(R_M_POP(scratch_uint));
-    else if (!i_d)
+    } else if (!i_d) {
         regs16[REG_SP] += i_data0;
+    }
     NEXT_OP;
 OP_20: // MOV r/m, immed
     R_M_OP(mem[op_from_addr], =, i_data2);
@@ -800,7 +812,7 @@ OP_22: // OUT DX/imm8, AL/AX
     if (likely(scratch_uint < IO_PORT_COUNT)) {
         R_M_OP(io_ports[scratch_uint], =, regs8[REG_AL]);
 
-        if ((scratch_uint == 0x61)) {
+        if (scratch_uint == 0x61) {
             io_hi_lo = 0;
             spkr_en |= (regs8[REG_AL] & 3);
             pico_x86_pit_set_speaker_control(regs8[REG_AL]);
@@ -899,7 +911,7 @@ OP_41: // AAM
     NEXT_OP;
 OP_42: // AAD
     i_w = 0;
-    regs16[REG_AX] = op_result = 0xFF & regs8[REG_AL] + i_data0 * regs8[REG_AH];
+    regs16[REG_AX] = op_result = (0xFF & regs8[REG_AL]) + (i_data0 * regs8[REG_AH]);
     NEXT_OP;
 OP_43: // SALC
     regs8[REG_AL] = -regs8[FLAG_CF];
@@ -980,8 +992,7 @@ OP_48: // Emulator-specific 0F xx opcodes
 #ifdef DEBUG_CONSOLE
             printf("\n[FATAL ERROR] Disk read failed at absolute sector %lu!\n", abs_sector);
 #endif
-            while (1)
-                ;
+            while (1) { };
         }
         regs16[REG_AX] = br;
         break;
@@ -1007,10 +1018,13 @@ OP_48: // Emulator-specific 0F xx opcodes
 #ifdef DEBUG_CONSOLE
             printf("\n[FATAL ERROR] Disk write failed at absolute sector %lu!\n", abs_sector);
 #endif
-            while (1)
-                ;
+            while (1) { };
         }
         regs16[REG_AX] = bw;
+        break;
+    }
+    case 4: { // INT9 keyboard scancode decode
+        pico_x86_keyb_process_scancode(regs8[REG_AL]);
         break;
     }
     case 5: {
@@ -1023,8 +1037,8 @@ OP_48: // Emulator-specific 0F xx opcodes
         new_tm.tm_mon = (int32_t)CAST(uint32_t) mem[src + 16];
         new_tm.tm_year = (int32_t)CAST(uint32_t) mem[src + 20];
 
-        int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
-                                        : aon_timer_start_calendar(&new_tm);
+        bool ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
+                                         : aon_timer_start_calendar(&new_tm);
         if (likely(ok)) {
             regs8[REG_AL] = 0x00; // Success
         } else {
@@ -1049,8 +1063,8 @@ OP_48: // Emulator-specific 0F xx opcodes
             new_tm.tm_min = min;
             new_tm.tm_sec = sec;
 
-            int ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
-                                            : aon_timer_start_calendar(&new_tm);
+            bool ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
+                                             : aon_timer_start_calendar(&new_tm);
             if (likely(ok)) {
                 regs8[REG_AL] = 0x00;
             } else {
@@ -1061,6 +1075,8 @@ OP_48: // Emulator-specific 0F xx opcodes
         }
         break;
     }
+    default:
+        break;
     }
     NEXT_OP;
 OP_51:
@@ -1077,23 +1093,25 @@ OP_51:
 
 OP_53:
     switch (raw_opcode_id) {
-    case 0x9B: // WAIT
-        break;
-    case 0xD8: // FPU ESC
-    case 0xD9:
-    case 0xDA:
-    case 0xDB:
-    case 0xDC:
-    case 0xDD:
-    case 0xDE:
-    case 0xDF:
-        break;
-    case 0xF0: // LOCK
-        break;
+    // case 0x9B: // WAIT
+    //     break;
+    // case 0xD8: // FPU ESC
+    // case 0xD9:
+    // case 0xDA:
+    // case 0xDB:
+    // case 0xDC:
+    // case 0xDD:
+    // case 0xDE:
+    // case 0xDF:
+    //     break;
+    // case 0xF0: // LOCK
+    //     break;
     case 0xF4: // HLT
         if (regs8[FLAG_IF]) {
             __wfi();
         }
+        break;
+    default:
         break;
     }
     goto OP_NOP;
@@ -1117,8 +1135,8 @@ next_opcode:
 
     inst_size_t size = inst_size_table[raw_opcode_id];
 
-    reg_ip += (i_mod * (i_mod != 3) + 2 * (!i_mod && i_rm == 6)) * i_mod_size + size.base_size
-        + size.w_size * (i_w + 1);
+    reg_ip += (((i_mod * (i_mod != 3)) + ((!i_mod && i_rm == 6) << 1)) * i_mod_size)
+        + size.base_size + (size.w_size * (i_w + 1));
 
     // If instruction needs to update SF, ZF and PF, set them as appropriate
     if (set_flags_type & FLAGS_UPDATE_SZP) {
@@ -1129,10 +1147,12 @@ next_opcode:
 
         // If instruction is an arithmetic or logic operation, also set
         // AF/OF/CF as appropriate.
-        if (set_flags_type & FLAGS_UPDATE_AO_ARITH)
+        if (set_flags_type & FLAGS_UPDATE_AO_ARITH) {
             set_AF_OF_arith();
-        if (set_flags_type & FLAGS_UPDATE_OC_LOGIC)
+        }
+        if (set_flags_type & FLAGS_UPDATE_OC_LOGIC) {
             set_CF(0), set_OF(0);
+        }
     }
 
     // Application has set trap flag, so fire INT 1
@@ -1147,7 +1167,7 @@ next_opcode:
     // keystrokes
     // At the end of the loop:
 
-    isr_ready = !seg_override_en && !rep_override_en && regs8[FLAG_IF] && !trap_flag;
+    isr_ready = ((!seg_override_en && !rep_override_en && regs8[FLAG_IF] && !trap_flag) != 0);
     if ((isr_ready)) {
         isr();
     }

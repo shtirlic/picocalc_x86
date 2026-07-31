@@ -8,14 +8,12 @@
  * Licensed under GPLv3 for the combined work.
  */
 
-#include <math.h>
-
-#include "pico/stdlib.h"
-#include "hardware/pio.h"
 #include "hardware/gpio.h"
+#include "hardware/pio.h"
 
 #include "picocalc_display.h"
 #include "picocalc_display.pio.h"
+#include <pico/time.h>
 
 #define SERIAL_CLK_DIV 1.6f
 #define MADCTL_BGR_PIXEL_ORDER (1 << 3)
@@ -108,7 +106,7 @@ static void __always_inline lcd_set_dc_cs(const bool dc, const bool cs)
 {
     sleep_us(5);
     gpio_put_masked(
-        (1u << TFT_DC_PIN) | (1u << TFT_CS_PIN), !!dc << TFT_DC_PIN | !!cs << TFT_CS_PIN);
+        (1U << TFT_DC_PIN) | (1U << TFT_CS_PIN), !!dc << TFT_DC_PIN | !!cs << TFT_CS_PIN);
     sleep_us(5);
 }
 
@@ -189,7 +187,8 @@ static void __always_inline start_pixels()
     lcd_set_dc_cs(1, 0);
 }
 
-[[maybe_unused]] static void test_pattern()
+[[maybe_unused]]
+static void test_pattern()
 {
     start_pixels();
     for (int i = 0; i < SCREEN_HEIGHT * SCREEN_WIDTH; i++) {

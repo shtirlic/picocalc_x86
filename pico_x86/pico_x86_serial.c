@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Serg Podtynnyi
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stdio.h>
-#include "pico/stdlib.h"
-#include "hardware/uart.h"
-#include "hardware/regs/uart.h"
 #include "hardware/address_mapped.h"
 #include "hardware/gpio.h"
+#include "hardware/regs/uart.h"
+#include "hardware/uart.h"
 
 #include "pico_x86.h"
 #include "pico_x86_serial.h"
+#include <hardware/timer.h>
+#include <pico/time.h>
 
 extern uint8_t io_ports[];
 extern uint8_t* regs8;
@@ -190,9 +190,11 @@ void __time_critical_func(pico_x86_serial_port_out)(uint16_t port)
         com1_set_mcr(val);
         break;
     case 0x3FD: // LSR
+        [[fallthrough]]; // Read-only
     case 0x3FE: // MSR
-        break; // Read-only
+        [[fallthrough]]; // Read-only
     case 0x3FF: // Scratch register
+        [[fallthrough]]; // Read-only
     default:
         break;
     }

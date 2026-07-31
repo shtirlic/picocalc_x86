@@ -1,0 +1,33 @@
+---
+# If:
+#     PathExclude: [rp2040-psram/.*]
+CompileFlags:
+  BuiltinHeaders: QueryDriver
+  Add:
+    - --target=riscv32-none-elf
+    - --sysroot=/opt/riscv/riscv-none-elf
+Diagnostics:
+  UnusedIncludes: None
+  ClangTidy:
+    Add: [modernize*, bugprone*, performance*, readability*]
+    Remove: [modernize-use-trailing-return-type,
+            bugprone-easily-swappable-parameters,
+            readability-magic-numbers,
+            readability-identifier-length,
+            readability-implicit-bool-conversion,
+            readability-avoid-nested-conditional-operator,
+            readability-function-cognitive-complexity,
+            bugprone-inc-dec-in-conditions]
+InlayHints:
+  BlockEnd: true
+  Designators: true
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+  DefaultArguments: true
+  TypeNameLimit: 24
+Hover:
+  ShowAKA: true
+  MacroContentsLimit: 2048
+Documentation:
+  CommentFormat: Doxygen

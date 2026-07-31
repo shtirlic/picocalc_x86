@@ -31,8 +31,8 @@ typedef struct {
 extern pit_channel_t pit_channels[3];
 
 void pico_x86_pit_init(void);
-void __time_critical_func(pico_x86_pit_out)(uint16_t port, uint8_t val);
-uint8_t __time_critical_func(pico_x86_pit_in)(uint16_t port);
+void pico_x86_pit_out(uint16_t port, uint8_t val);
+uint8_t pico_x86_pit_in(uint16_t port);
 void pico_x86_pit_set_speaker_control(uint8_t val);
 uint32_t pico_x86_pit_advance(uint32_t ticks);
 uint32_t pico_x86_pit_channel2_freq_hz(void);

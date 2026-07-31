@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 .section .rodata
-.global _binary_bios_bin_start
-.global _binary_bios_bin_end
+.global binary_bios_bin_start
+.global binary_bios_bin_end
 
-_binary_bios_bin_start:
+binary_bios_bin_start:
     .incbin "pico_x86/bios.bin"
-_binary_bios_bin_end:
+binary_bios_bin_end:

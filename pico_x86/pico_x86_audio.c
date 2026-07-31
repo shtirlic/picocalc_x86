@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Serg Podtynnyi
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "pico/stdlib.h"
-#include "hardware/pwm.h"
 #include "hardware/clocks.h"
+#include "hardware/gpio.h"
+#include "hardware/pwm.h"
 
 #include "pico_x86_audio.h"
 #include "pico_x86_pit.h"
 
 #include <math.h>
+#include <stdint.h>
 
 #define SPKR_AMPLITUDE 180
 
@@ -23,8 +24,8 @@ static void picocalc_sound_init(irq_handler_t my_handler)
     gpio_set_function(audio_pin_l, GPIO_FUNC_PWM);
     gpio_set_function(audio_pin_r, GPIO_FUNC_PWM);
 
-    const int slice_l = pwm_gpio_to_slice_num(audio_pin_l);
-    const int slice_r = pwm_gpio_to_slice_num(audio_pin_r);
+    const uint32_t slice_l = pwm_gpio_to_slice_num(audio_pin_l);
+    const uint32_t slice_r = pwm_gpio_to_slice_num(audio_pin_r);
 
     pwm_clear_irq(slice_l);
     pwm_set_irq_enabled(slice_l, true);
@@ -39,7 +40,7 @@ static void picocalc_sound_init(irq_handler_t my_handler)
 
     uint32_t sys_hz = clock_get_hz(clk_sys);
     float clkdiv_raw = (float)sys_hz / ((float)PWM_SAMPLE_HZ * (PWM_WRAP + 1));
-    float clkdiv = roundf(clkdiv_raw * 16.0f) / 16.0f;
+    float clkdiv = roundf(clkdiv_raw * 16.0F) / 16.0F;
     pwm_smpl_hz = (uint32_t)(sys_hz / (clkdiv * (PWM_WRAP + 1)));
 
     pwm_config config = pwm_get_default_config();
@@ -66,8 +67,9 @@ static void __isr __time_critical_func(pico_x86_speaker_irq)()
 
         if (freq) {
             uint32_t half_period = pwm_smpl_hz / (2 * freq);
-            if (half_period == 0)
+            if (half_period == 0) {
                 half_period = 1;
+            }
 
             if (++wave_counter >= half_period) {
                 wave_counter = 0;

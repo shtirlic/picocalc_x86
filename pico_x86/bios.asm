@@ -7,7 +7,7 @@
 ; Modifications Copyright (c) 2026 Serg Podtynnyi
 ; Licensed under GPLv3 for the combined work.
 ;
-	cpu	8086
+	cpu	186
 
 ; Here we define macros for some custom instructions that help the emulator talk with the outside
 ; world. They are described in detail in the hint.html file, which forms part of the emulator
@@ -27,6 +27,10 @@
 
 %macro	extended_write_disk 0
 	db	0x0f, 0x03
+%endmacro
+
+%macro	extended_process_key 0
+	db	0x0f, 0x04
 %endmacro
 
 %macro	extended_set_rtc 0
@@ -68,8 +72,8 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Revision 0.8', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '07/27/26', 0, 0xfa, 0
+biosstr db	'PicoCalc x86 BIOS Rev 0.8', 0, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/01/26', 0, 0xfa, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
 
 bios_entry:
@@ -128,61 +132,61 @@ bios_entry:
 	mov	[cs:hd_secs_lo], cx
 
 	cmp	cx, 0
-	je	maybe_no_hd
+	je	.maybe_no_hd
 
 	mov	word [cs:num_disks], 2
-	jmp	calc_hd
+	jmp	.calc_hd
 
-maybe_no_hd:
+    .maybe_no_hd:
 
 	cmp	dx, 0
-	je	no_hd
+	je	.no_hd
 
 	mov	word [cs:num_disks], 2
-	jmp	calc_hd
+	jmp	.calc_hd
 
-no_hd:
+    .no_hd:
 
 	mov	word [cs:num_disks], 1
 
-calc_hd:
+    .calc_hd:
 
 	mov	ax, cx
 	mov	word [cs:hd_max_track], 1
 	mov	word [cs:hd_max_head], 1
 
 	cmp	dx, 0		; More than 63 total sectors? If so, we have more than 1 track.
-	ja	sect_overflow
+	ja	.sect_overflow
 	cmp	ax, 63
-	ja	sect_overflow
+	ja	.sect_overflow
 
 	mov	[cs:hd_max_sector], ax
-	jmp	calc_heads
+	jmp	.calc_heads
 
-sect_overflow:
+    .sect_overflow:
 
 	mov	cx, 63		; Calculate number of tracks
 	div	cx
 	mov	[cs:hd_max_track], ax
 	mov	word [cs:hd_max_sector], 63
 
-calc_heads:
+    .calc_heads:
 
 	mov	dx, 0		; More than 1024 tracks? If so, we have more than 1 head.
 	mov	ax, [cs:hd_max_track]
 	cmp	ax, 1024
-	ja	track_overflow
+	ja	.track_overflow
 
-	jmp	calc_end
+	jmp	.calc_end
 
-track_overflow:
+    .track_overflow:
 
 	mov	cx, 1024
 	div	cx
 	mov	[cs:hd_max_head], ax
 	mov	word [cs:hd_max_track], 1024
 
-calc_end:
+    .calc_end:
 
 	; Convert number of tracks into maximum track (0-based) and then store in INT 41
 	; HD parameter table
@@ -199,7 +203,8 @@ calc_end:
 
 ; Main BIOS entry point. Zero the flags, and set up registers.
 
-boot:	mov	ax, 0
+boot:
+    mov	ax, 0
 	push	ax
 	popf
 
@@ -253,64 +258,9 @@ boot:	mov	ax, 0
 	mov	cx, 0x100
 	rep	movsb
 
-   ; Reset and Intital setup needed for startup and soft reboot
-   ; Set Mode 3 and needed values for CGA registers
-	mov	dx, 0x3d8   ; CGA Mode Control
-	mov	al, 0x80	; Display reset custom
-	out	dx, al
-    mov	al, 0x29	; Default text mode 3
-	out	dx, al
-    mov	[es:0x65], al
-
-	mov	dx, 0x3d9  ; CGA Color register
-	mov	al, 0x30
-	out	dx, al
-    mov	[es:0x66], al
-
-	mov	dx, 0x3d4
-	mov	al, 1		; CRTC "horizontal displayed"
-	out	dx, al
-	mov	dx, 0x3d5
-	mov	al, 80		; 80 columns
-	out	dx, al
-
-	mov	dx, 0x3d4
-	mov	al, 6		; CRTC "vertical displayed"
-	out	dx, al
-	mov	dx, 0x3d5
-	mov	al, 25		; 25 rows
-	out	dx, al
-
-
-    mov	dx, 0x3d4
-	mov	al, 9		; CRTC "Maximum Scan Line"
-	out	dx, al
-	mov	dx, 0x3d5
-	mov	al, 7		; 8 scanlines per character for Text Mode
-	out	dx, al
-
-	mov	dx, 0x3d4
-	mov	al, 0x0C  ; start address high
-	out	dx, al
-	mov	dx, 0x3d5
-	mov	al, 0
-	out	dx, al
-
-	mov	dx, 0x3d4
-	mov	al, 0x0D ; start address low
-	out	dx, al
-	mov	dx, 0x3d5
-	mov	al, 0
-
-
-    ; Clear video memory
-
-	mov	ax, 0xb800
-	mov	es, ax
-	mov	di, 0
-	mov	cx, 80*25
-	mov	ax, 0x0700
-	rep	stosw
+	mov	ah, 0x00
+	mov	al, 0x03	; Mode 3: 80x25 16-color text (default PC boot mode)
+	int	0x10
 
     ; Set up some I/O ports, between 0 and 0x3FF.
     ; Most of them we set to 0xFF, to indicate no device present
@@ -332,6 +282,10 @@ next_out:
 
 	inc	dx
 
+	cmp	dx, 0x20	; PIC Command
+	je	next_out
+	cmp	dx, 0x21	; PIC Data / IMR
+	je	next_out
 	cmp	dx, 0x40	; We deal with the PIT channel 0 later
 	je	next_out
 	cmp	dx, 0x42	; We deal with the PIT channel 2 later
@@ -341,11 +295,6 @@ next_out:
 	cmp	dx, 0x61	; Sound output
 	je	next_out
 	cmp	dx, 0x64	; Keyboard status
-	je	next_out
-
-	cmp	dx, 0x20	; PIC Command
-	je	next_out
-	cmp	dx, 0x21	; PIC Data / IMR
 	je	next_out
 
 	cmp	dx, 0x3F8 ; com port
@@ -393,10 +342,27 @@ next_out:
 	mov	ax, [es:tm_msec]
 	mov	[cs:last_int8_msec], ax
 
-    ; Print BIOS string
-	mov	si, biosstr     ; Point SI to the string at the top of the file
+    ; Print BIOS strings
+	mov	si, biosstr
+	call	print_str
+
+	mov	ah, 0x0E
+	mov	al, ' '
+	int	10h
+
+	mov	si, mem_top + 5
+	call	print_str
+
+	mov	ah, 0x0E
+	mov	al, ','
+	int	10h
+	mov	al, ' '
+	int	10h
+
+	mov	si, biosstr2
 	call	print_str
     call    print_new_line
+
 
     ; MEMORY POST TEST
 	mov	si, memteststr
@@ -454,15 +420,17 @@ mem_test_loop:
 	call	print_kb_status
     call print_new_line
 
+
     ; POST success one short beep
+    mov bl, 4
     call beep
 
-
+; ***************** BOOT DISK *****************
 boot_disk:
 
 	mov	byte [cs:boot_retry], 4
 
-  boot_disk_try:
+    .boot_disk_try:
 
 	mov	ax, 0
 	mov	es, ax
@@ -474,7 +442,7 @@ boot_disk:
 	mov	bx, 0x7c00
 	int	13h
 
-	jnc	boot_disk_ok
+	jnc	.boot_disk_ok
 
 	; Reset the disk system before retrying
 
@@ -483,7 +451,7 @@ boot_disk:
 	int	13h
 
 	dec	byte [cs:boot_retry]
-	jnz	boot_disk_try
+	jnz	.boot_disk_try
 
     ; All retries failed
 
@@ -491,12 +459,12 @@ boot_disk:
 	call	print_str
 	call	print_new_line
 
-  boot_disk_hang:
+    .boot_disk_hang:
 
 	hlt
-	jmp	boot_disk_hang
+	jmp	.boot_disk_hang
 
-  boot_disk_ok:
+    .boot_disk_ok:
 
     ; Jump to boot sector
 
@@ -505,7 +473,32 @@ boot_disk:
 
 ; ************************* INT 9h handler - keyboard (PC BIOS standard)
 
-%include "bios_keyb.asm"
+int9:
+    push ax
+    push bx
+
+    ; --- READ HARDWARE & INT 15h KEYBOARD INTERCEPT ---
+    in al, 0x60          ; Read hardware scancode from port 60h
+    mov bl, al           ; Save raw scancode to BL just in case
+
+    mov ah, 0x4F         ; Keyboard Intercept function
+    stc                  ; Standard convention: set carry flag before calling
+    int 0x15             ; Call INT 15h to let TSRs intercept/modify the key
+
+    jc .intercept_done   ; If CF=CY (Carry Set), TSR modified AL. Keep AL.
+    mov al, bl           ; If CF=NC (Carry Clear), no modification. Restore original.
+.intercept_done:
+
+    ; AL holds the final scancode. Hand it to C for decoding and buffering.
+    extended_process_key
+
+    ; Hardware Acknowledge (Send EOI to PIC)
+    mov al, 0x20
+    out 0x20, al
+
+    pop bx
+    pop ax
+    iret
 
 ; ************************* INT Ah handler - timer (Hardware Paced)
 
@@ -1655,7 +1648,7 @@ beep:
     push ax
     push cx
 
-    mov al, 0xB6
+    mov al, 0xB6  ; SEL TIM 2,LSB,MSB,BINARY
     out 0x43, al
     mov ax, 0x0533    ; ~896 Hz tone
     out 0x42, al
@@ -1663,21 +1656,16 @@ beep:
     out 0x42, al
 
     in  al, 0x61
+    mov ah, al
     or  al, 0x03
     out 0x61, al
+    xor cx, cx
 
-    mov dx, 4
-  .delay_outer:
-    mov cx, 0
-  .delay_inner:
-    nop
-    loop .delay_inner
-
-    dec dx
-    jnz .delay_outer
-
-    in  al, 0x61
-    and al, 0xFC
+    .beep_loop:
+    loop .beep_loop
+    dec bl
+    jnz .beep_loop
+    mov al, ah
     out 0x61, al
 
     pop cx
@@ -2022,9 +2010,9 @@ disp_page	db	0 ; 0040:0062
 crtport		dw	0x3d4  ; 0040:0063 ADDR_6845
 crt_mode    db  0 ; 0040:0065 CRT_MODE_SET
 crt_pallete	db	0 ; 0040:0066 CRT_PALETTE
-times 5		db	0
-clk_dtimer	dd	0
-clk_rollover	db	0
+times 5		db	0 ; 40:0067 Cassette data area or POST data area
+clk_dtimer	dd	0 ; 40:006c Timer tick counter (count of 55ms ticks since CPU reset)
+clk_overflw	db	0 ; 40:0070 Timer overflow flag (timer has rolled over 24 hr)
 ctrl_break	db	0
 soft_rst_flg	dw	0x1234
 		db	0

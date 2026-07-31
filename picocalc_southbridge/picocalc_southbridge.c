@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Serg Podtynnyi
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stdio.h>
-#include <pico/stdio.h>
 #include "picocalc_southbridge.h"
+#include <pico/stdio.h>
+#include <stdio.h>
 // #include <pico/time.h>
 
 static uint8_t sb_initialized = 0;
@@ -40,6 +40,7 @@ static __always_inline uint8_t translate_kbd_code(uint8_t raw_code) {
 
         case 0xA1: return 0x38; // ALT
         case 0xA2: return 0x2A; // L-SHIFT
+        case 0xA3: return 0x36; // R-SHIFT
         case 0xA5: return 0x1D; // CTRL
         case 0x0A: return 0x1C; // ENTER
         case 0xB1: return 0x01; // ESC
@@ -59,6 +60,8 @@ static __always_inline uint8_t translate_kbd_code(uint8_t raw_code) {
         case 0x88: return 0x42; // F8
         case 0x89: return 0x43; // F9
         case 0x90: return 0x44; // F10
+default:
+break;
     }
 
     // Normal scancodes
@@ -72,16 +75,17 @@ static __always_inline uint8_t translate_kbd_code(uint8_t raw_code) {
 // clang-format on
 // static uint64_t wait_start = 0;
 
-uint16_t __time_critical_func(picocalc_southbridge_kb_read)()
+int32_t __time_critical_func(picocalc_southbridge_kb_read)()
 {
-    if (!sb_initialized)
+    if (!sb_initialized) {
         return -1;
+    }
 
     // if ((time_us_64() - wait_start) < 10000)
     // return -1;
 
     uint8_t msg[1] = { SB_REG_FIF };
-    uint16_t retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
+    int32_t retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("picocalc_southbridge_kb_read i2c write error\n");
         return -1;
@@ -130,8 +134,9 @@ int picocalc_southbridge_battery()
     unsigned char msg[2];
     msg[0] = SB_REG_BAT;
 
-    if (sb_initialized == 0)
+    if (sb_initialized == 0) {
         return -1;
+    }
 
     int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
@@ -159,8 +164,9 @@ int picocalc_southbridge_backlight(uint8_t val)
     msg[1] = val;
     bitSet(msg[0], 7);
 
-    if (sb_initialized == 0)
+    if (sb_initialized == 0) {
         return -1;
+    }
 
     int retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 2, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {

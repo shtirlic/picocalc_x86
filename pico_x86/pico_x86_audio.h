@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #define PWM_WRAP 250
 #define PWM_SAMPLE_HZ 87686
 

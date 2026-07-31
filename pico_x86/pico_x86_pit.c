@@ -3,8 +3,8 @@
 //
 // the Intel 8253/8254 Programmable Interval Timer (PIT)
 
+#include <pico/time.h>
 #include <string.h>
-#include "pico/aon_timer.h"
 
 #include "pico_x86.h"
 #include "pico_x86_pit.h"
@@ -17,7 +17,7 @@ static volatile uint8_t speaker_data_enable;
 
 static uint16_t __always_inline bcd_to_bin(uint16_t bcd)
 {
-    return (bcd & 0xF) + ((bcd >> 4) & 0xF) * 10 + ((bcd >> 8) & 0xF) * 100
+    return (bcd & 0xF) + (((bcd >> 4) & 0xF) * 10) + ((bcd >> 8) & 0xF) * 100
         + ((bcd >> 12) & 0xF) * 1000;
 }
 
@@ -88,8 +88,9 @@ static void __time_critical_func(pit_readback)(uint8_t cmd)
     uint8_t latch_status = !(cmd & 0x10);
 
     for (int ch = 0; ch < 3; ch++) {
-        if (!(cmd & (2 << ch)))
+        if (!(cmd & (2 << ch))) {
             continue;
+        }
 
         pit_channel_t* c = &pit_channels[ch];
 
@@ -130,8 +131,9 @@ static void __time_critical_func(pit_command)(uint8_t cmd)
     }
 
     uint8_t mode = (cmd >> 1) & 7;
-    if (mode > 5)
+    if (mode > 5) {
         mode &= 3;
+    }
 
     c->rw_mode = rw;
     c->mode = mode;
@@ -224,8 +226,9 @@ static void __always_inline pit_set_gate2(uint8_t level)
 {
     pit_channel_t* c = &pit_channels[2];
     level = level ? 1 : 0;
-    if (c->gate == level)
+    if (c->gate == level) {
         return;
+    }
 
     c->gate = level;
 
@@ -257,8 +260,9 @@ void __always_inline pico_x86_pit_set_speaker_control(uint8_t val)
 
 static inline uint32_t __always_inline advance_pit_channel(pit_channel_t* c, uint32_t ticks)
 {
-    if (!c->armed || !c->gate)
+    if (!c->armed || !c->gate) {
         return 0;
+    }
 
     if (__builtin_expect(ticks <= c->pos, 1)) {
         c->pos -= ticks;
@@ -267,7 +271,7 @@ static inline uint32_t __always_inline advance_pit_channel(pit_channel_t* c, uin
 
     uint32_t max = effective_max(c);
     uint32_t remain = ticks - (c->pos + 1);
-    uint32_t events = 1 + remain / max;
+    uint32_t events = 1 + (remain / max);
     c->pos = max - 1 - (remain % max);
 
     if ((1 << c->mode) & 0x31) {
@@ -276,16 +280,18 @@ static inline uint32_t __always_inline advance_pit_channel(pit_channel_t* c, uin
         return 1;
     }
 
-    if (events & 1)
+    if (events & 1) {
         c->output ^= 1;
+    }
 
     return events;
 }
 
 uint32_t __always_inline pico_x86_pit_advance(uint32_t ticks)
 {
-    if (__builtin_expect(ticks == 0, 0))
+    if (likely(ticks == 0)) {
         return 0;
+    }
 
     uint32_t irq0_events = advance_pit_channel(&pit_channels[0], ticks);
 
@@ -297,19 +303,23 @@ uint32_t __always_inline pico_x86_pit_advance(uint32_t ticks)
 
 uint32_t __always_inline(pico_x86_pit_channel2_freq_hz)(void)
 {
-    if (!speaker_data_enable)
+    if (!speaker_data_enable) {
         return 0;
+    }
 
     pit_channel_t* c = &pit_channels[2];
-    if (!c->armed || !c->gate)
+    if (!c->armed || !c->gate) {
         return 0;
+    }
 
-    if (c->mode != 2 && c->mode != 3)
+    if (c->mode != 2 && c->mode != 3) {
         return 0;
+    }
 
     uint32_t max = effective_max(c);
-    if (max == 0)
+    if (max == 0) {
         return 0;
+    }
 
     return (uint32_t)(PIT_BASE_HZ / max);
 }

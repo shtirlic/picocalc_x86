@@ -73,27 +73,81 @@ int10:
 	mov	word [es:vid_cols-bios_data], 80
 	mov	word [es:page_size-bios_data], 0x1000
 	mov	bl, 80
+	mov	ch, 0x71	; H Total 80 columns
+	mov	cl, 0x5A	; H Sync 80 columns
 	jmp	.apply_crtc
 
 .set_40:
 	mov	word [es:vid_cols-bios_data], 40
 	mov	word [es:page_size-bios_data], 0x0800
 	mov	bl, 40
+	mov	ch, 0x38	; H Total 40 columns
+	mov	cl, 0x2D	; H Sync 40 columns
 
 .apply_crtc:
+
+	; Standard IBM CGA BIOS CRTC parameter table for text modes.
+	mov	dx, 0x3d4
+	mov	al, 0		; R0: H Total
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, ch
+	out	dx, al
 
 	mov	dx, 0x3d4
 	mov	al, 1
 	out	dx, al
 	mov	dx, 0x3d5
-	mov	al, bl		; Apply 40 or 80 columns
+	mov	al, bl		; 40 or 80 columns
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 2		; R2: H Sync Position
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, cl
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 3		; R3: H Sync Width
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x0A
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 4		; R4: V Total
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x1F
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 5		; R5: V Total Adjust
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 6
 	out	dx, al
 
 	mov	dx, 0x3d4
 	mov	al, 6
 	out	dx, al
 	mov	dx, 0x3d5
-	mov	al, 25		; 25 rows
+	mov	al, 25		; R6: V Displayed
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 7		; R7: V Sync Position
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x1C
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 8		; R8: Interlace Mode
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 2
 	out	dx, al
 
     mov	dx, 0x3d4
@@ -101,6 +155,20 @@ int10:
 	out	dx, al
 	mov	dx, 0x3d5
     mov	al, 7		; 8 scanlines per character for Text Mode
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 0x0A	; R10: Cursor Start
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 6
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 0x0B	; R11: Cursor End
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 7
 	out	dx, al
 
 	mov	dx, 0x3d4
@@ -124,7 +192,7 @@ int10:
 
 	mov	[es:vidmode-bios_data], al
 
-	mov	bh, 7		; Black background, white foreground
+	mov	bh, 7		        ; Black background, white foreground
 	call	clear_screen	; ANSI clear screen
 
 	; CGA Overscan/Color Select register (0x3D9)
@@ -170,21 +238,70 @@ int10_switch_to_cga_gfx:
 	mov	es, dx
 
 	mov	[es:vidmode-bios_data], al	      ; Save the requested video mode (4, 5, or 6) to BDA
-	mov	word [es:0x63], 0x3D4 ; UPDATE: Set CRTC base port in BDA to CGA (Color)
+	mov	word [es:0x63], 0x3D4             ; Set CRTC base port in BDA to CGA (Color)
 
-	; Program the standard CGA CRTC (0x3D4 / 0x3D5)
+
 	mov	dx, 0x3d4
-	mov	al, 1		; R1: Horizontal Displayed
+	mov	al, 0		; R0: H Total
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x38
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 1		; R1: H Displayed
 	out	dx, al
 	mov	dx, 0x3d5
 	mov	al, 0x28	; 40 columns (40 * 8 = 320 pixels)
 	out	dx, al
 
 	mov	dx, 0x3d4
-	mov	al, 6		; R6: Vertical Displayed
+	mov	al, 2		; R2: H Sync Position
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x2D
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 3		; R3: H Sync Width
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x0A
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 4		; R4: V Total
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x7F
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 5		; R5: V Total Adjust
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 6
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 6		; R6: V Displayed
 	out	dx, al
 	mov	dx, 0x3d5
 	mov	al, 0x64	; 100 character rows (CGA hardware draws 2 scanlines per row = 200 pixels)
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 7		; R7: V Sync Position
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 0x70
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 8		; R8: Interlace Mode
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 2
 	out	dx, al
 
     mov	dx, 0x3d4
@@ -192,6 +309,20 @@ int10_switch_to_cga_gfx:
 	out	dx, al
 	mov	dx, 0x3d5
 	mov	al, 1		; 2 scanlines per character row for CGA Graphics
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 0x0A	; R10: Cursor Start
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 6
+	out	dx, al
+
+	mov	dx, 0x3d4
+	mov	al, 0x0B	; R11: Cursor End
+	out	dx, al
+	mov	dx, 0x3d5
+	mov	al, 7
 	out	dx, al
 
 	mov	dx, 0x3d4

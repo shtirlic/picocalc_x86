@@ -1,28 +1,24 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Serg Podtynnyi
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stdio.h>
-#include <string.h>
-#include "hardware/gpio.h"
 #include "hardware/structs/bus_ctrl.h"
-#include "hardware/pwm.h"
-#include "pico/stdlib.h"
-#include <pico/multicore.h>
 #include "pico/aon_timer.h"
-#include "pico/util/datetime.h"
+#include <pico/multicore.h>
+#include <stdint.h>
+#include <stdio.h>
 
 #include "config.h"
 
-#include "psram_spi.h"
-#include "tf_card.h"
 #include "ff.h"
 #include "picocalc_display.h"
 #include "picocalc_southbridge.h"
+#include "psram_spi.h"
+#include "tf_card.h"
 
 #include "pico_x86.h"
+#include "pico_x86_audio.h"
 #include "pico_x86_pit.h"
 #include "pico_x86_video.h"
-#include "pico_x86_audio.h"
 
 #include "splash.h"
 
@@ -149,7 +145,8 @@ static void init_fs()
     const DWORD tot_sect = (lfs->n_fatent - 2) * lfs->csize;
     const DWORD fre_sect = fre_clust * lfs->csize;
     printf("done\n");
-    printf("▼ %10lu KiB total drive space.\n▼ %10lu KiB available.\n", tot_sect / 2, fre_sect / 2);
+    printf(
+        "▼ %10d KiB total drive space.\n▼ %10d KiB available.\n", (tot_sect / 2), (fre_sect / 2));
     // f_unmount("");                 /* Unmount the default drive */
 }
 

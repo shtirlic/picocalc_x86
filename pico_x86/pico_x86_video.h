@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
-#include "pico/stdlib.h"
+#include <stdint.h>
 
 #define CGA_VRAM_ADDR 0xb8000
 #define CGA_TEXT_OUTPUT_ROWS 200
 
-typedef struct __attribute__((packed, aligned(4))) {
+typedef struct __attribute__((aligned(2))) {
     // Hardware Index State
+    //
     // ADDR_6845  0040:0063 0x3D4
 
     /**
@@ -154,14 +155,14 @@ static const uint16_t cga_palette[24] = {
     0x0000, 0x07FF, 0xF800, 0xFFFF // Palette 2: L. Cyan, L. Red, White
 };
 
-void __time_critical_func(video_cga_port_in)(uint32_t port);
-void __time_critical_func(video_cga_port_out)(uint32_t port);
+void video_cga_port_in(uint32_t port);
+void video_cga_port_out(uint32_t port);
 
 typedef void (*video_display_put_color_cb)(uint16_t color);
 typedef void (*video_display_reset_cb)();
 typedef void (*video_display_begin_frame_cb)();
 
-typedef struct __attribute__((packed, aligned(4))) {
+typedef struct __attribute__((aligned(2))) {
     uint16_t screen_width;
     uint16_t screen_height;
 
@@ -171,7 +172,7 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 } Video_Config;
 
-typedef struct __attribute__((packed, aligned(4))) {
+typedef struct __attribute__((aligned(2))) {
     bool co80_mode;
     int font_height;
     int font_width;
@@ -182,4 +183,4 @@ typedef struct __attribute__((packed, aligned(4))) {
 
 void pico_x86_video_display_init(void);
 void pico_x86_video_set_config(Video_Config* video_cfg);
-void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline);
+void pico_x86_video_cga_render_scanline(uint16_t scanline);

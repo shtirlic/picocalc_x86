@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
-#include "pico/stdlib.h"
 #include "ff.h"
 
 // Standard 3.5" 1.44MB floppy, formatted FAT12
@@ -14,16 +13,18 @@
 #define FDD_ROOT_ENTRIES 224u
 #define FDD_ROOT_DIR_SECTORS ((FDD_ROOT_ENTRIES * 32u) / FDD_SECTOR_SIZE)
 #define FDD_META_SECTORS                                                                           \
-    (FDD_RESERVED_SECTORS + FDD_NUM_FATS * FDD_SECTORS_PER_FAT + FDD_ROOT_DIR_SECTORS)
+    (FDD_RESERVED_SECTORS + (FDD_NUM_FATS * FDD_SECTORS_PER_FAT) + FDD_ROOT_DIR_SECTORS)
 
 #define FDD_IMAGE_PATH "0:/x86/fd.img"
 
 // clang-format off
+[[maybe_unused]]
 static void create_blank_floppy_image()
 {
     static FIL f;
-    if (f_open(&f, FDD_IMAGE_PATH, FA_CREATE_NEW | FA_WRITE) != FR_OK)
+    if (f_open(&f, FDD_IMAGE_PATH, FA_CREATE_NEW | FA_WRITE) != FR_OK) {
         return;
+}
 
     UINT bw;
 
@@ -67,17 +68,20 @@ static void create_blank_floppy_image()
 
     for (int fat = 0; fat < FDD_NUM_FATS; fat++) {
         f_write(&f, fat_header, sizeof(fat_header), &bw);
-        for (unsigned i = 1; i < FDD_SECTORS_PER_FAT; i++)
+        for (unsigned i = 1; i < FDD_SECTORS_PER_FAT; i++) {
             f_write(&f, zero_sector, sizeof(zero_sector), &bw);
+}
     }
 
     // --- Root dir ---
-    for (unsigned i = 0; i < FDD_ROOT_DIR_SECTORS; i++)
+    for (unsigned i = 0; i < FDD_ROOT_DIR_SECTORS; i++) {
         f_write(&f, zero_sector, sizeof(zero_sector), &bw);
+}
 
     // --- Data area: free  ---
-    for (unsigned i = FDD_META_SECTORS; i < FDD_TOTAL_SECTORS; i++)
+    for (unsigned i = FDD_META_SECTORS; i < FDD_TOTAL_SECTORS; i++) {
         f_write(&f, zero_sector, sizeof(zero_sector), &bw);
+}
 
     f_close(&f);
 }

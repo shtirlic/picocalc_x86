@@ -19,6 +19,7 @@ target_sources(pico_x86 INTERFACE
     pico_x86_video.c
     pico_x86_audio.c
     pico_x86_serial.c
+    pico_x86_keyb.c
 )
 
 target_include_directories(pico_x86 INTERFACE ${CMAKE_CURRENT_LIST_DIR} )

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
-#include "pico/stdlib.h"
+
+#include <stdint.h>
 
 #ifndef SERIAL_UART_ID
 #define SERIAL_UART_ID uart0

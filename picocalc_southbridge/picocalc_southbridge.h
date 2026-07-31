@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <pico/stdlib.h>
 #include <hardware/i2c.h>
+#include <pico/stdlib.h>
 
 // SouthBridge I2C Params
 #define SB_I2C_I i2c1
@@ -41,4 +41,4 @@
 void picocalc_southbridge_init();
 int picocalc_southbridge_battery();
 int picocalc_southbridge_backlight(uint8_t);
-uint16_t picocalc_southbridge_kb_read();
+int32_t picocalc_southbridge_kb_read();

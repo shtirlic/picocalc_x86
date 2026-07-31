@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Serg Podtynnyi
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stdio.h>
-#include "pico/stdlib.h"
-#include "pico/time.h"
-
-#include "pico_x86.h"
 #include "pico_x86_video.h"
 #include "font4x10.h"
 #include "font8x8.h"
+#include "pico_x86.h"
+#include <hardware/timer.h>
 
 extern uint8_t mem[];
 extern uint8_t io_ports[];
@@ -33,29 +30,51 @@ static TextGeometry __scratch_y("video") frame_text_geo = { };
 static void __time_critical_func(update_text_geometry)()
 {
     frame_text_geo.co80_mode = crtc.mcr_hires;
-    frame_text_geo.font_height = frame_text_geo.co80_mode ? 10 : 8;
+    frame_text_geo.font_height = (int)frame_text_geo.co80_mode ? 10 : 8;
 
     frame_text_geo.num_cols = crtc.dr_horiz_displayed;
-    if (frame_text_geo.num_cols == 0)
+    if (frame_text_geo.num_cols == 0) {
         frame_text_geo.num_cols = frame_text_geo.co80_mode ? 80 : 40;
+    }
 
     frame_text_geo.font_width = (video_config && frame_text_geo.num_cols)
         ? (video_config->screen_width / frame_text_geo.num_cols)
         : (frame_text_geo.co80_mode ? 4 : 8);
-    if (frame_text_geo.font_width < 1)
+
+    if (frame_text_geo.font_width < 1) {
         frame_text_geo.font_width = 1;
+    }
 
     frame_text_geo.num_rows = crtc.dr_vert_displayed;
-    if (frame_text_geo.num_rows == 0)
+    if (frame_text_geo.num_rows == 0) {
         frame_text_geo.num_rows = 25;
+    }
 
     frame_text_geo.max_scanline = crtc.dr_max_scan_line;
     if (frame_text_geo.co80_mode && frame_text_geo.max_scanline == 7) {
         frame_text_geo.max_scanline = 9;
     }
-    if (frame_text_geo.max_scanline == 0
-        && (frame_text_geo.num_rows == 25 || crtc.dr_vert_displayed == 0)) {
+
+    if (frame_text_geo.max_scanline == 0 && frame_text_geo.num_rows == 25) {
         frame_text_geo.max_scanline = frame_text_geo.font_height - 1;
+    }
+}
+
+static void __time_critical_func(update_crtc_frame_timing)()
+{
+    if (crtc.dr_vert_total == 0) {
+        return;
+    }
+
+    uint8_t char_height = frame_text_geo.max_scanline + 1;
+
+    uint16_t vert_total_rows = crtc.dr_vert_total + 1;
+    uint32_t logical_total = ((uint32_t)vert_total_rows * char_height) + crtc.dr_vert_total_adjust;
+    if (logical_total < 1) {
+        logical_total = 1;
+    }
+    if (logical_total > 0xFFFF) {
+        logical_total = 0xFFFF;
     }
 }
 
@@ -67,11 +86,31 @@ static uint8_t __always_inline cga_retrace_bits()
                          || current_crtc_scanline >= active_display_end)
         ? 1
         : 0;
-    uint8_t vsync = (current_crtc_scanline >= active_display_end
-                        && current_crtc_scanline < (active_display_end + 16))
-        ? 1
-        : 0;
-    uint8_t hblank = (line_pos >= 48) ? 1 : 0;
+
+    // sync vertical pos
+    uint16_t char_height = frame_text_geo.max_scanline + 1;
+    uint16_t vsync_start = active_display_start + (crtc.dr_vert_sync_pos * char_height);
+
+    // apply interlace offset
+    if (crtc.dr_interlace_mode != 0) {
+        vsync_start += 1;
+    }
+
+    uint8_t vsync
+        = (current_crtc_scanline >= vsync_start && current_crtc_scanline < (vsync_start + 16)) ? 1
+                                                                                               : 0;
+
+    // sync horizontal timings
+    uint16_t h_total = crtc.dr_horiz_total;
+    if (h_total == 0) {
+        h_total = 1;
+    }
+
+    // calc hsync bounds
+    uint32_t hsync_start_time = (crtc.dr_horiz_sync_pos * 64) / h_total;
+    uint32_t hsync_end_time = hsync_start_time + ((crtc.dr_horiz_sync_width * 64) / h_total);
+
+    uint8_t hblank = (line_pos >= hsync_start_time && line_pos <= hsync_end_time) ? 1 : 0;
 
     return (uint8_t)(0xF0 | (vsync << 3) | (vblank | hblank));
 }
@@ -177,6 +216,8 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
             // render helper
             crtc.cursor_offset = (crtc.dr_cursor_loc_high << 8) | crtc.dr_cursor_loc_low;
             break;
+        default:
+            break;
         }
     }
 
@@ -205,8 +246,9 @@ void __time_critical_func(video_cga_port_out)(uint32_t port)
 static void __always_inline video_display_reset()
 {
     if (unlikely(crtc.mcr_display_reset)) {
-        video_config->display_reset_callback();
         crtc.mcr_display_reset = false;
+        // reset_crtc_state();
+        video_config->display_reset_callback();
     }
 }
 
@@ -223,8 +265,19 @@ static void __time_critical_func(render_text_scanline)(int y)
     int source_bits = frame_text_geo.co80_mode ? 4 : 8;
 
     int total_rows = frame_text_geo.max_scanline + 1;
-    if (total_rows < 1)
+    if (total_rows < 1) {
         total_rows = 1;
+    }
+
+    int drawn_pixels = frame_text_geo.num_cols * font_width;
+    int left_pad = (video_config->screen_width - drawn_pixels) / 2;
+    if (left_pad < 0) {
+        left_pad = 0;
+    }
+
+    for (int padding = 0; padding < left_pad; padding++) {
+        video_config->display_put_color_callback(bg_color_border);
+    }
 
     int out_x = 0;
 
@@ -263,15 +316,17 @@ static void __time_critical_func(render_text_scanline)(int y)
         uint8_t glyph_pixels = 0;
 
         int scaled_row = (ra * font_height) / total_rows;
-        if (scaled_row >= font_height)
+        if (scaled_row >= font_height) {
             scaled_row = font_height - 1;
+        }
 
         if (likely(frame_text_geo.co80_mode)) {
             if (character >= 0xB0 && character <= 0xDF) {
                 glyph_pixels = font_4x10[(character * 10) + scaled_row];
             } else {
-                if (scaled_row >= 1)
+                if (scaled_row >= 1) {
                     glyph_pixels = font_4x10[(character * 10) + (scaled_row - 1)];
+                }
             }
         } else {
             glyph_pixels = font_8x8[(character * 8) + scaled_row];
@@ -292,8 +347,7 @@ static void __time_critical_func(render_text_scanline)(int y)
         }
     }
 
-    int drawn_pixels = frame_text_geo.num_cols * font_width;
-    for (int padding = drawn_pixels; padding < video_config->screen_width; padding++) {
+    for (int padding = left_pad + drawn_pixels; padding < video_config->screen_width; padding++) {
         video_config->display_put_color_callback(bg_color_border);
     }
 }
@@ -311,8 +365,9 @@ static void __time_critical_func(render_cga_graphics_scanline)(int y)
     uint16_t m6_bg_color = textmode_palette[0];
 
     uint8_t hd = crtc.dr_horiz_displayed;
-    if (hd == 0)
+    if (hd == 0) {
         hd = 40;
+    }
 
     int bytes_per_row = hd * 2;
     bool needs_downscale
@@ -381,8 +436,11 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
     scanline_start_time = time_us_32();
     current_crtc_scanline = scanline;
 
+    static uint32_t cached_scaled_rows = 1;
+    static uint32_t cached_text_output_rows = 200;
+
     uint16_t bg_color_border = crtc.mcr_hires_graphics_mode
-        ? bg_color_border = textmode_palette[0]
+        ? textmode_palette[0]
         : textmode_palette[crtc.color_select_register & 0x0F];
 
     bool is_text_mode = !crtc.mcr_graphics_mode && !crtc.mcr_hires_graphics_mode;
@@ -391,22 +449,24 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
         video_display_reset();
 
         update_text_geometry();
+        update_crtc_frame_timing();
 
         int text_output_rows = CGA_TEXT_OUTPUT_ROWS;
         if (is_text_mode) {
             text_output_rows = frame_text_geo.num_rows * (frame_text_geo.max_scanline + 1);
         }
-        if (text_output_rows > video_config->screen_height) {
-            text_output_rows = video_config->screen_height;
+        cached_text_output_rows = text_output_rows;
+
+        uint32_t scaled_rows = (uint32_t)text_output_rows;
+
+        if (scaled_rows > (uint32_t)video_config->screen_height) {
+            scaled_rows = video_config->screen_height;
         }
 
-        active_display_start = (video_config->screen_height - text_output_rows) / 2;
-        active_display_end = active_display_start + text_output_rows;
-    }
+        cached_scaled_rows = scaled_rows;
 
-    if (current_crtc_scanline == active_display_start) {
-        ma_row_start = (crtc.dr_start_addr_high << 8) | crtc.dr_start_addr_low;
-        ra = 0;
+        active_display_start = (video_config->screen_height - scaled_rows) / 2;
+        active_display_end = active_display_start + scaled_rows;
     }
 
     if (current_crtc_scanline < active_display_start
@@ -418,19 +478,7 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
     }
 
     int active_y = current_crtc_scanline - active_display_start;
-
-    if (likely(crtc.mcr_video_output)) {
-        if (is_text_mode) {
-            render_text_scanline(active_y);
-        } else {
-            render_cga_graphics_scanline(active_y);
-        }
-
-    } else {
-        for (int i = 0; i < video_config->screen_width; i++) {
-            video_config->display_put_color_callback(bg_color_border);
-        }
-    }
+    uint32_t logical_y = ((uint32_t)active_y * cached_text_output_rows) / cached_scaled_rows;
 
     uint8_t cols = 0;
     uint8_t max_scanline = 0;
@@ -440,19 +488,32 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
         max_scanline = frame_text_geo.max_scanline;
     } else {
         cols = crtc.dr_horiz_displayed;
-        if (cols == 0)
+        if (cols == 0) {
             cols = 40;
+        }
 
         max_scanline = crtc.dr_max_scan_line;
-        if (max_scanline == 0)
+        if (max_scanline == 0) {
             max_scanline = 1;
+        }
     }
 
-    if (ra >= max_scanline) {
-        ra = 0;
-        ma_row_start += cols;
+    uint16_t row_index = logical_y / (max_scanline + 1);
+    ra = logical_y % (max_scanline + 1);
+
+    uint16_t base_addr = (crtc.dr_start_addr_high << 8) | crtc.dr_start_addr_low;
+    ma_row_start = base_addr + (row_index * cols);
+
+    if (likely(crtc.mcr_video_output)) {
+        if (is_text_mode) {
+            render_text_scanline(active_y);
+        } else {
+            render_cga_graphics_scanline(active_y);
+        }
     } else {
-        ra++;
+        for (int i = 0; i < video_config->screen_width; i++) {
+            video_config->display_put_color_callback(bg_color_border);
+        }
     }
 }
 
