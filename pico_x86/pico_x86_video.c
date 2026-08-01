@@ -291,7 +291,8 @@ static void __time_critical_func(render_text_scanline)(int y)
             && (((ma_row_start + x) & 0x1FFF) == crtc.cursor_offset)) {
             bool in_cursor_range = false;
             if (crtc.dr_cursor_start <= crtc.dr_cursor_end) {
-                in_cursor_range = (ra >= crtc.dr_cursor_start && ra <= crtc.dr_cursor_end);
+                in_cursor_range = (ra >= crtc.dr_cursor_start + (8 / source_bits)
+                    && ra <= crtc.dr_cursor_end + (8 / source_bits));
             } else {
                 in_cursor_range = ((ra >= crtc.dr_cursor_start && ra <= (total_rows - 1))
                     || ra <= crtc.dr_cursor_end);
