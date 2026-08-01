@@ -2,12 +2,11 @@
 
 ![image](splash.svg)
 
-8086/80186 emulator for **ClockWorkPi PicoCalc** (https://www.clockworkpi.com/picocalc)
-with Raspberry Pi Pico 2 board.
+This software is an 8086 and 80186 emulator for the **ClockWorkPi PicoCalc** (https://www.clockworkpi.com/picocalc). It uses the Raspberry Pi Pico 2 board. The architecture uses data from the 8086tiny project by Adrian Cable.
 
 The project based on great 8086tiny project (https://github.com/adriancable/8086tiny) by Adrian Cable.
 
-## Using
+## Dependencies
 * https://github.com/elehobica/pico_fatfs for storage and disk access
     * https://elm-chan.org/fsw/ff/ upstream FatFs project
 * https://github.com/polpo/rp2040-psram for PSRAM access
@@ -18,11 +17,15 @@ If someone wants to run on ARM cores it would be very easy to adapt it.
 
 ## Specs
 
+### CPU
+   * 8086 CPU emulation
+   * Some 80186 instructions supported
+
 ### RAM
-In stock config:
-* available conventional **RAM is 442368(0x6C000) bytes, or 432 KB**
-* 16 KB video ram for CGA
-* 16 KB for BIOS and internal usage
+In stock Pico 2 config without soldered PSRAM:
+   * The available conventional **RAM is 442368(0x6C000) bytes, or 432 KB**
+   * 16 KB of video RAM is available for the CGA adapter
+   * 16 KB of RAM is reserved for the BIOS and internal processes.
 
 ### Performance
 It's around ~1 MIPS, so it's like overpowered IBM PC XT or PS/2 model 30.
@@ -31,9 +34,15 @@ It's around ~1 MIPS, so it's like overpowered IBM PC XT or PS/2 model 30.
 CGA video adapter
 
    * text modes 80x25 and 40x25 (Passing all CGA text test from `CGA_COMP` utility).
-   * graphic modes 4 and 6 (issues with text output during graphics WIP, some tests not passed).
+   * graphic modes 4 and 6 (some tests not passed due to row/column reporgramming).
    * 4x10 Font is used to support 80x25 default text mode.
-   * Margins on the top and bottom of the screen to correct aspect ratio. 
+   * 8x8 Font is used for 40x25 text and 320x200 graphic mode.
+   * Scanline based renderer.
+   * V blank, v/h retrace timing supported.
+   * Margins on the top and bottom of the screen to correct aspect ratio.
+
+### PIT
+   * All channels and modes supported.
 
 ### Sound
    * PC Speaker supported.
@@ -44,7 +53,8 @@ CGA video adapter
 
 ### Keyboard
    * Keyboard works with hotkeys available like ALT+F1, CTRL+G etc.
-   * Short press on PicoCalc Power button doing warm reboot if latest south bridge firmware flashed.  
+   * To get SHIFT+F6-F10 press left SHIFT and right SHIFT together.
+   * Short press on PicoCalc Power button doing warm reboot if latest `south bridge` firmware flashed.
 
 
 ## Getting Started
@@ -56,7 +66,7 @@ Firmware images are available only for Raspberry Pi Pico 2.
 * Load uf2 firmware image via `picotool` or USB mass storage method.
 * Format SD card with FAT32 file system, create `x86` dir in the root and put desired `hd.img` into it, so the resulting path on the SD Card is `/x86/hd.img`
 
-### Disk Images
+### Hard Disk Images
 
 #### How to make your own `hd.img`
 
@@ -85,11 +95,11 @@ mount c hd.img -t hdd -fs fat -size 512,63,8,1024
 
 ### Floppy
 
-Floppy supported as image `/x86/fd.img` if not present in startup time, blank floppy image wil be created.
+Floppy supported as image `/x86/fd.img` if it's not present in startup time, blank floppy image wil be created during start.
 
 ### Serial / Modem / File Transfers
 
-#### File Transfers
+#### File Transfers over Serial
 
 You can transfer files between PicoCalc x86 and host PC running terminal(zmodem)
 or using `DDLINK` utility https://dunfield.themindfactory.com/dnld/DDLINK.ZIP by Dave Dunfield
@@ -108,20 +118,20 @@ ddlink /s c=1,57600
 ```
 Transfer speed is around ~6KB/sec
 
-#### Modem emulation
+#### Modem/Terminal emulation
 
 Use https://github.com/go4retro/tcpser for example on linux host
 
-Example
+Example:
 ```
-./tcpser -d /dev/ttyUSB0 -s 57600 -l 7  -i "s0=1&k4e1" -n123=amnesiabbs.duckdns.org
+./tcpser -d /dev/ttyUSB0 -s 57600 -l 4 -i "s0=1&k4e1" -n123=bbs.alsgeeklab.com:2323
 ```
 
 This starts host modem emulation on `ttyUSB0` (PicoCalc Pico uart port connected via USB-C)
 
 Explanation of modem init command `"s0=1&k4e1"`:
 >It will pick up the phone after one ring, enable XON/XOFF software flow control and enable
-echo modem commands. Also adds speed dial for `123` number, so in terminal you could dial via `ATDT123` and then connect via emultion/proxy to the telnet `amnesiabbs.duckdns.org`
+echo modem commands. Also adds speed dial for `123` number, so in terminal you could dial via `ATDT123` and then connect via emultion/proxy to the telnet `bbs.alsgeeklab.com:2323`
 The current BBS list can be found here https://www.telnetbbsguide.com
 
 For the terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.com/product/qmodem/45 or better alternative.
@@ -129,7 +139,7 @@ For the terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.co
 
 ## Building
 
-### Must
+### Required
  * ClockworkPi PicoCalc with Raspberry Pi Pico 2 compatible board installed
  * Git
  * nasm (https://github.com/netwide-assembler/nasm/)
@@ -137,7 +147,7 @@ For the terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.co
  * pico-sdk 2.3.0 (https://github.com/raspberrypi/pico-sdk) (/usr/share/pico-sdk)
  * riscv-none-elf gcc (https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack)
 
-### Optional
+### Optional Software
  * dosbox-x (https://dosbox-x.com) or dosbox-staging (https://www.dosbox-staging.org)
  * Krita for svg splash
  * Pixelorama for font editing (https://pixelorama.org/)
@@ -151,7 +161,7 @@ git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
 ## Todo
 
  * [ ] Fix CGA text output in graphics mode for mode 4 and mode 6
- * [ ] Add good 8x8 font for 40 column text mode
+ * [x] Add good 8x8 font for 40 column text mode
  * [ ] Make screenshot function (hotkey) via saving on SD Card
  * [ ] Support boards with soldered PSRAM connected via QMI like Pimoroni Pico 2 Plus (map memory up to 736kb)
  * [ ] EMS 3.2 full testing and XMS on top of it
@@ -169,4 +179,4 @@ git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
  * [ ] Support backlights and power resets via https://git.jcsmith.fr/jackcartersmith/picocalc_BIOS
  * [ ] Power management / battery reporting
  * [ ] Pass all test for CGA comp https://github.com/MobyGamer/CGACompatibilityTester
- * [ ] Battery / performance and status overlay at the top of the screen, shortcut helpers at the bottom 
+ * [ ] Battery / performance and status overlay at the top of the screen, shortcut helpers at the bottom
