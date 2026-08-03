@@ -9,7 +9,9 @@
  */
 
 #include "hardware/sync.h"
+#include "hardware/watchdog.h"
 #include "pico/aon_timer.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -256,7 +258,8 @@ static void keyboard_process()
 #ifdef DEBUG_CONSOLE
             printf("Reboot key pressed\n");
 #endif
-            pc_interrupt(0x19);
+            // pc_interrupt(0x19);
+            watchdog_reboot(0, 0, 10);
             return;
         }
 
