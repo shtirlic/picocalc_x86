@@ -16,7 +16,7 @@ include(/usr/share/pico-sdk/external/pico_sdk_import.cmake)
 
 project(picocalc_x86
         LANGUAGES C CXX ASM
-        VERSION 0.0.4
+        VERSION 0.0.5
         DESCRIPTION "PicoCalc x86 Emulator on Raspberry Pi Pico 2"
 )
 
@@ -48,6 +48,7 @@ target_compile_definitions(picocalc_x86 PRIVATE
     AUDIO_PIN_L=26
     AUDIO_PIN_R=27
     BIOS_EMBED
+    PICO_SYS_CLOCK_MHZ=250
     # DEBUG_PERF
     # DEBUG_KBD
     # DEBUG_CONSOLE

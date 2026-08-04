@@ -1533,7 +1533,7 @@ clear_screen:
 	mov	ah, bh      ; Keep the attribute from BH
 
 	mov	al, [es:vidmode-bios_data]
-	cmp	al, 4
+    cmp	al, 4
 	jae	.gfx_clear
 
 .text_clear:
@@ -1549,7 +1549,7 @@ clear_screen:
 	mov	bx, 0xb800
 	mov	es, bx
 	mov	di, 0
-	mov	cx, 8192
+	mov	cx, 8192 ; stosw write words, so 8192*2
 	rep	stosw
 	pop	bx
 

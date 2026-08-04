@@ -3,11 +3,10 @@
 
 #include "hardware/structs/bus_ctrl.h"
 #include "pico/aon_timer.h"
+#include <hardware/clocks.h>
 #include <pico/multicore.h>
 #include <stdint.h>
 #include <stdio.h>
-
-#include "config.h"
 
 #include "ff.h"
 #include "picocalc_display.h"
@@ -49,34 +48,27 @@ static void init_display()
     printf("done\n");
 }
 
+// static uint16_t buffer[320];
+// static void put_color_in_buffer(uint16_t color) { buffer[current_scanline] = color; }
+
 static void __time_critical_func(display_render)()
 {
     Video_Config video_config = {
         .display_reset_callback = picocalc_display_reset,
         .display_begin_frame_callback = picocalc_display_begin_frame,
+        .display_end_frame_callback = picocalc_display_end_frame,
         .display_put_color_callback = picocalc_display_put_color,
+        // .display_put_color_callback = put_color_in_buffer,
         .screen_height = SCREEN_HEIGHT,
         .screen_width = SCREEN_WIDTH,
     };
     pico_x86_video_set_config(&video_config);
     pico_x86_video_display_init();
-
-    uint16_t current_scanline = 0;
-    video_config.display_begin_frame_callback();
-
-    while (1) {
-        pico_x86_video_cga_render_scanline(current_scanline++);
-        if (current_scanline >= SCREEN_HEIGHT) {
-            current_scanline = 0;
-            video_config.display_begin_frame_callback();
-        }
-
-        tight_loop_contents();
-    }
+    pico_x86_video_render(); // rendering loop
     __unreachable();
 }
 
-static void(second_core)()
+static void __time_critical_func(second_core)()
 {
     init_sothbridge();
     init_sound();
@@ -152,7 +144,7 @@ static void init_fs()
 
 static void init_system()
 {
-    set_sys_clock_khz(240000, true);
+    set_sys_clock_hz(PICO_SYS_CLOCK_MHZ * MHZ, true);
     bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
     aon_timer_start_with_timeofday();
 
@@ -166,7 +158,6 @@ static void init()
 {
     init_system();
     printf("\n\n▼ PicoCalc x86 Version: %s , Build: %s \n", APP_VERSION, __DATE__);
-
     printf("\n▼ PicoCalc Init... \n");
     init_ram();
     init_fs();

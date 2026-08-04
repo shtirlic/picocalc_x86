@@ -300,9 +300,7 @@ void pico_x86_serial_ctl(void)
         regs8[REG_AH] = (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00)
             | (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00);
         regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
-#ifdef DEBUG_CONSOLE
         printf("[SERIAL DEBUG] status -> AH=%02x\n", regs8[REG_AH]);
-#endif
         break;
     }
     case 0x04: { // Extended Initialize (PS/2-style)
@@ -337,10 +335,8 @@ void pico_x86_serial_ctl(void)
         regs8[REG_AH] = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00)
             | (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
         regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
-#ifdef DEBUG_CONSOLE
         printf("[SERIAL DEBUG] ext init: divisor=%u lcr=%02x -> AH=%02x\n", divisor, com1_lcr,
             regs8[REG_AH]);
-#endif
         break;
     }
     case 0x05: { // Modem Control Register access (PS/2-style)
@@ -356,9 +352,7 @@ void pico_x86_serial_ctl(void)
         break;
     }
     default:
-#ifdef DEBUG_CONSOLE
         printf("[SERIAL DEBUG] unknown AH=%02x -> reporting 0x80\n", ah);
-#endif
         regs8[REG_AH] = 0x80;
         break;
     }

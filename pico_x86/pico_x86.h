@@ -11,6 +11,7 @@
 #pragma once
 
 #include "hardware/hazard3/features.h"
+#include <stdio.h>
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -23,6 +24,10 @@
 #define BIT_CLEAR(value, bit) ((value) &= ~BIT(bit))
 #define BIT_TOGGLE(value, bit) ((value) ^= BIT(bit))
 #define BIT_READ(value, bit) (((value) & BIT(bit)) != 0)
+
+#ifndef DEBUG_CONSOLE
+#define printf(...) ((void)0)
+#endif
 
 // Extracts bits from 'high' down to 'low' (inclusive)
 #ifdef __hazard3_extension_xh3bextm

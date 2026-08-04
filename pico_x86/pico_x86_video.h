@@ -161,6 +161,7 @@ void video_cga_port_out(uint32_t port);
 typedef void (*video_display_put_color_cb)(uint16_t color);
 typedef void (*video_display_reset_cb)();
 typedef void (*video_display_begin_frame_cb)();
+typedef void (*video_display_end_frame_cb)();
 
 typedef struct __attribute__((aligned(2))) {
     uint16_t screen_width;
@@ -169,7 +170,7 @@ typedef struct __attribute__((aligned(2))) {
     video_display_put_color_cb display_put_color_callback;
     video_display_reset_cb display_reset_callback;
     video_display_begin_frame_cb display_begin_frame_callback;
-
+    video_display_end_frame_cb display_end_frame_callback;
 } Video_Config;
 
 typedef struct __attribute__((aligned(2))) {
@@ -183,4 +184,4 @@ typedef struct __attribute__((aligned(2))) {
 
 void pico_x86_video_display_init(void);
 void pico_x86_video_set_config(Video_Config* video_cfg);
-void pico_x86_video_cga_render_scanline(uint16_t scanline);
+void pico_x86_video_render();

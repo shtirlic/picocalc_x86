@@ -247,8 +247,8 @@ static void __always_inline video_display_reset()
 {
     if (unlikely(crtc.mcr_display_reset)) {
         crtc.mcr_display_reset = false;
-        // reset_crtc_state();
-        video_config->display_reset_callback();
+        // bugs, disable for now
+        // video_config->display_reset_callback();
     }
 }
 
@@ -323,14 +323,14 @@ static void __time_critical_func(render_text_scanline)(int y)
 
         if (likely(frame_text_geo.co80_mode)) {
             if (character >= 0xB0 && character <= 0xDF) {
-                glyph_pixels = font_4x10[(character * 10) + scaled_row];
+                glyph_pixels = font4x10[(character * 10) + scaled_row];
             } else {
                 if (scaled_row >= 1) {
-                    glyph_pixels = font_4x10[(character * 10) + (scaled_row - 1)];
+                    glyph_pixels = font4x10[(character * 10) + (scaled_row - 1)];
                 }
             }
         } else {
-            glyph_pixels = font_8x8[(character * 8) + scaled_row];
+            glyph_pixels = font8x8[(character * 8) + scaled_row];
         }
 
         for (int bit = 0; bit < font_width; bit++) {
@@ -432,13 +432,12 @@ static void __time_critical_func(render_cga_graphics_scanline)(int y)
     }
 }
 
-void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
+static void __time_critical_func(pico_x86_video_cga_render_scanline)()
 {
     scanline_start_time = time_us_32();
-    current_crtc_scanline = scanline;
 
     static uint32_t cached_scaled_rows = 1;
-    static uint32_t cached_text_output_rows = 200;
+    static uint32_t cached_text_output_rows = CGA_TEXT_OUTPUT_ROWS;
 
     uint16_t bg_color_border = crtc.mcr_hires_graphics_mode
         ? textmode_palette[0]
@@ -448,7 +447,6 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
 
     if (current_crtc_scanline == 0) {
         video_display_reset();
-
         update_text_geometry();
         update_crtc_frame_timing();
 
@@ -515,6 +513,22 @@ void __time_critical_func(pico_x86_video_cga_render_scanline)(uint16_t scanline)
         for (int i = 0; i < video_config->screen_width; i++) {
             video_config->display_put_color_callback(bg_color_border);
         }
+    }
+}
+
+void __time_critical_func(pico_x86_video_render)()
+{
+    current_crtc_scanline = 0;
+    video_config->display_begin_frame_callback();
+    while (1) {
+        pico_x86_video_cga_render_scanline();
+        current_crtc_scanline++;
+        if (current_crtc_scanline >= video_config->screen_height) {
+            video_config->display_end_frame_callback();
+            current_crtc_scanline = 0;
+            video_config->display_begin_frame_callback();
+        }
+        tight_loop_contents();
     }
 }
 

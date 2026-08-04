@@ -255,9 +255,7 @@ static void keyboard_process()
 
         // PicoCalc: Reboot on short press power key
         if (unlikely(scancode == 0x91)) {
-#ifdef DEBUG_CONSOLE
             printf("Reboot key pressed\n");
-#endif
             // pc_interrupt(0x19);
             watchdog_reboot(0, 0, 10);
             return;
@@ -269,9 +267,6 @@ static void keyboard_process()
         io_ports[0x60] = scancode;
         pc_interrupt(9);
     }
-#ifdef DEBUG_CONSOLE
-    if (unlikely(uart_is_readable(uart_default))) { }
-#endif
 }
 
 extern FATFS fs;
@@ -992,9 +987,7 @@ OP_48: // Emulator-specific 0F xx opcodes
                 regs16[REG_AX] = 0;
                 break;
             }
-#ifdef DEBUG_CONSOLE
             printf("\n[FATAL ERROR] Disk read failed at absolute sector %lu!\n", abs_sector);
-#endif
             while (1) { };
         }
         regs16[REG_AX] = br;
@@ -1018,9 +1011,7 @@ OP_48: // Emulator-specific 0F xx opcodes
                 regs16[REG_AX] = 0;
                 break;
             }
-#ifdef DEBUG_CONSOLE
             printf("\n[FATAL ERROR] Disk write failed at absolute sector %lu!\n", abs_sector);
-#endif
             while (1) { };
         }
         regs16[REG_AX] = bw;
