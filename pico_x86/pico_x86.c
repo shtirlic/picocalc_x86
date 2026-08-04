@@ -318,14 +318,25 @@ void pico_x86_run()
     // Set DL equal to the boot device: 0 for the FD, or 0x80 for the HD.
     regs8[REG_DL] = 0x80;
 
+#define BIOS_LOAD_OFFSET 0x100
+#define BIOS_MAX_SIZE (0x4000 - BIOS_LOAD_OFFSET - 16)
+
 // TODO: bios override if present
 #ifndef BIOS_EMBED
     FIL fpb;
     fr = f_open(&fpb, "0:/x86/bios.bin", FA_READ);
 
+    if (fr == FR_OK && f_size(&fpb) > BIOS_MAX_SIZE) {
+        printf("\n[FATAL ERROR] BIOS image is %llu bytes, exceeds the %d byte "
+               "limit for the F000 ROM window!\n",
+            f_size(&fpb), BIOS_MAX_SIZE);
+        f_close(&fpb);
+        while (1) { }
+    }
+
     // Load BIOS image into F000:0100, and set IP to 0100
     UINT br;
-    fr = f_read(&fpb, regs8 + (reg_ip = 0x100), 0x3E00, &br);
+    fr = f_read(&fpb, regs8 + (reg_ip = BIOS_LOAD_OFFSET), BIOS_MAX_SIZE, &br);
     if (fr == FR_OK) {
         printf("\n▼ BIOS Image Size: %d bytes\n", br);
     } else {
@@ -337,7 +348,15 @@ void pico_x86_run()
 #else
     size_t bios_size = (size_t)(binary_bios_bin_end - binary_bios_bin_start);
     printf("\n▼ BIOS found in Flash at 0x%p, size: %zu bytes\n", binary_bios_bin_start, bios_size);
-    memcpy(regs8 + (reg_ip = 0x100), binary_bios_bin_start, bios_size);
+
+    if (bios_size > BIOS_MAX_SIZE) {
+        printf("\n[FATAL ERROR] BIOS image is %zu bytes, exceeds the %d byte "
+               "limit for the F000 ROM window!\n",
+            bios_size, BIOS_MAX_SIZE);
+        while (1) { }
+    }
+
+    memcpy(regs8 + (reg_ip = BIOS_LOAD_OFFSET), binary_bios_bin_start, bios_size);
 #endif
 
     fr = f_open(&fpd, "0:/x86/hd.img", FA_READ | FA_WRITE);
