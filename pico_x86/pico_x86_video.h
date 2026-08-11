@@ -47,20 +47,20 @@ typedef struct __attribute__((aligned(2))) {
     uint8_t address_register; // Stores the last value written to 0x3D4
 
     // Screen Geometry (Registers 0x00 to 0x09)
-    uint8_t dr_horiz_total; // 00H: Horizontal Total
-    uint8_t dr_horiz_displayed; // 01H: Number of columns (characters per row)
-    uint8_t dr_horiz_sync_pos; // 02H: Horizontal Sync Position
-    uint8_t dr_horiz_sync_width; // 03H: Horizontal Sync Pulse Width
-    uint8_t dr_vert_total; // 04H: Vertical Total
+    uint8_t dr_horiz_total;       // 00H: Horizontal Total
+    uint8_t dr_horiz_displayed;   // 01H: Number of columns (characters per row)
+    uint8_t dr_horiz_sync_pos;    // 02H: Horizontal Sync Position
+    uint8_t dr_horiz_sync_width;  // 03H: Horizontal Sync Pulse Width
+    uint8_t dr_vert_total;        // 04H: Vertical Total
     uint8_t dr_vert_total_adjust; // 05H: Vertical Total Adjust
-    uint8_t dr_vert_displayed; // 06H: Number of rows (character rows per screen)
-    uint8_t dr_vert_sync_pos; // 07H: Vertical Sync Position
-    uint8_t dr_interlace_mode; // 08H: Interlace Mode
-    uint8_t dr_max_scan_line; // 09H: Maximum Scan Line
+    uint8_t dr_vert_displayed;    // 06H: Number of rows (character rows per screen)
+    uint8_t dr_vert_sync_pos;     // 07H: Vertical Sync Position
+    uint8_t dr_interlace_mode;    // 08H: Interlace Mode
+    uint8_t dr_max_scan_line;     // 09H: Maximum Scan Line
 
     // Cursor Shape & Visibility (Registers 0x0A and 0x0B)
     uint8_t dr_cursor_start; // Start scanline (usually 0-7 for CGA)
-    uint8_t dr_cursor_end; // End scanline (usually 0-7 for CGA)
+    uint8_t dr_cursor_end;   // End scanline (usually 0-7 for CGA)
 
     // Start Address (Registers 0x0C and 0x0D)
     uint8_t dr_start_addr_high;
@@ -68,32 +68,33 @@ typedef struct __attribute__((aligned(2))) {
 
     // Cursor Location (Registers 0x0E and 0x0F)
     uint8_t dr_cursor_loc_high; // High byte of 1D cursor position
-    uint8_t dr_cursor_loc_low; // Low byte of 1D cursor position
+    uint8_t dr_cursor_loc_low;  // Low byte of 1D cursor position
 
     // Renderer Helpers
     uint16_t cursor_offset; // Combined 16-bit linear offset (High << 8 | Low)
-    bool cursor_visible; // True if hardware disable bit is NOT set
+    bool cursor_visible;    // True if hardware disable bit is NOT set
 
     // CGA Bios Modes
-    //   0 - 40x25 alpha (color burst disabled)         00101100b (2CH)
+    //   0 - 40x25 alpha (color burst disabled)(b/w)    00101100b (2CH)
     //   1 - 40x25 alpha                                00101000b (28H)
-    //   2 - 80x25 alpha (color burst disabled)         00101101b (2DH)
+    //   2 - 80x25 alpha (color burst disabled)(b/w)    00101101b (2DH)
     //   3 - 80x25 alpha                                00101001b (29H)
     //   4 - 320x200 graphics                           00101010b (2AH)
     //   5 - 320x200 graphics (color burst disabled)    00101110b (2EH)
-    //   6 - 640x200 graphics                           00011110b (1EH)
+    //   6 - 640x200 graphics (color burst disabled)    00011110b (1EH)
     //   7 - 80x25 alpha (MDA only)                     00101001b (29H)
     // 11H - 640x480 graphics (MCGA only)               00011000b (18H)
+    // 640x200 graphics (color burst enabled):          00011010b (1AH)
 
     // CGA Mode Control (Port 0x3D8) 40:0065
-    bool mcr_display_reset; // bit 7 display reset / custom
-                            // bit 6 not used
-    bool mcr_blink_enabled; // bit 5 blinking attribute
-    bool mcr_hires_graphics_mode; // bit 4 true if 640-wide graphics modes/ false  all other
-    bool mcr_video_output; // bit 3 true video enabled / false screen blank
+    bool mcr_display_reset;        // bit 7 display reset / custom
+                                   // bit 6 not used
+    bool mcr_blink_enabled;        // bit 5 blinking attribute
+    bool mcr_hires_graphics_mode;  // bit 4 true if 640-wide graphics modes/ false  all other
+    bool mcr_video_output;         // bit 3 true video enabled / false screen blank
     bool mcr_color_burst_disabled; // bit 2  true color burst disabled/ false enabled
-    bool mcr_graphics_mode; // bit 1 true 320-graphics mode / false all other
-    bool mcr_hires; // bit 0  true 80-char modes / false 40 char modes
+    bool mcr_graphics_mode;        // bit 1 true 320-graphics mode / false all other
+    bool mcr_hires;                // bit 0  true 80-char modes / false 40 char modes
 
     uint8_t mcr_register;
 
@@ -140,7 +141,7 @@ static const uint16_t textmode_palette[16] = {
     0xFAAA, // 12 - Light Red
     0xFAFF, // 13 - Light Magenta
     0xFFEA, // 14 - Yellow
-    0xF7DE // 15 - White
+    0xF7DE  // 15 - White
 };
 
 static const uint16_t cga_palette[24] = {
@@ -152,25 +153,33 @@ static const uint16_t cga_palette[24] = {
     // HIGH INTENSITY (Bit 4 = 1)
     0x0000, 0x07E0, 0xF800, 0xFFE0, // Palette 0: L. Green, L. Red, Yellow
     0x0000, 0x07FF, 0xF81F, 0xFFFF, // Palette 1: L. Cyan, L. Magenta, White
-    0x0000, 0x07FF, 0xF800, 0xFFFF // Palette 2: L. Cyan, L. Red, White
+    0x0000, 0x07FF, 0xF800, 0xFFFF  // Palette 2: L. Cyan, L. Red, White
 };
 
 void video_cga_port_in(uint32_t port);
 void video_cga_port_out(uint32_t port);
 
-typedef void (*video_display_put_color_cb)(uint16_t color);
+typedef void (*video_display_put_pixel_cb)(uint16_t pixel_color);
 typedef void (*video_display_reset_cb)();
 typedef void (*video_display_begin_frame_cb)();
 typedef void (*video_display_end_frame_cb)();
+typedef void (*video_display_update_video_config_cb)(void *video_config);
+
+typedef enum {
+    VID_CFG_NO_UPDATE = 0,
+    VID_CFG_NEED_UPDATE = 1,
+    VID_CFG_UPDATED = 2
+} Video_Confg_State;
 
 typedef struct __attribute__((aligned(2))) {
     uint16_t screen_width;
     uint16_t screen_height;
-
-    video_display_put_color_cb display_put_color_callback;
+    Video_Confg_State state;
+    video_display_put_pixel_cb display_put_pixel_callback;
     video_display_reset_cb display_reset_callback;
     video_display_begin_frame_cb display_begin_frame_callback;
     video_display_end_frame_cb display_end_frame_callback;
+    video_display_update_video_config_cb display_update_video_config_callback;
 } Video_Config;
 
 typedef struct __attribute__((aligned(2))) {
@@ -183,5 +192,5 @@ typedef struct __attribute__((aligned(2))) {
 } TextGeometry;
 
 void pico_x86_video_display_init(void);
-void pico_x86_video_set_config(Video_Config* video_cfg);
-void pico_x86_video_render();
+void pico_x86_video_set_config(Video_Config *video_cfg);
+void pico_x86_video_render(void);

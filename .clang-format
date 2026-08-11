@@ -1,6 +1,7 @@
 ---
 Language: Cpp
-BasedOnStyle: WebKit
+BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 100
 FixNamespaceComments: true
+ReferenceAlignment: Middle

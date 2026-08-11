@@ -33,7 +33,7 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_display picocalc_display)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/picocalc_southbridge picocalc_southbridge)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/pico_x86 pico_x86)
 
-add_executable(picocalc_x86 picocalc_x86.c)
+add_executable(picocalc_x86 picocalc_x86.c picocalc_x86_screenshot.c)
 
 configure_file(config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
@@ -47,8 +47,9 @@ target_compile_definitions(picocalc_x86 PRIVATE
     PSRAM_PIN_MISO=3
     AUDIO_PIN_L=26
     AUDIO_PIN_R=27
-    BIOS_EMBED
+    BIOS_EMBED_ONLY
     PICO_SYS_CLOCK_MHZ=250
+    PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64
     # DEBUG_PERF
     # DEBUG_KBD
     # DEBUG_CONSOLE
@@ -78,6 +79,7 @@ target_link_libraries(picocalc_x86
     pico_stdlib
     pico_multicore
     pico_aon_timer
+    pico_rand
     hardware_flash
     hardware_irq
     hardware_pwm

@@ -12,8 +12,8 @@
 #include <pico/time.h>
 
 extern uint8_t io_ports[];
-extern uint8_t* regs8;
-extern uint16_t* regs16;
+extern uint8_t *regs8;
+extern uint16_t *regs16;
 
 static bool serial_hw_ready = false;
 
@@ -27,8 +27,7 @@ static uint8_t com1_dlm = 0x00;
 static bool com1_rx_irq_pending = false;
 static uint8_t com1_lsr_err_latch = 0; // Latched OE/PE/FE/BI bits, LSR bit positions
 
-static void com1_set_mcr(uint8_t val)
-{
+static void com1_set_mcr(uint8_t val) {
     com1_mcr = val;
     if (val & 0x10)
         hw_set_bits(&uart_get_hw(SERIAL_UART_ID)->cr, UART_UARTCR_LBE_BITS);
@@ -38,8 +37,7 @@ static void com1_set_mcr(uint8_t val)
         com1_rx_irq_pending = false; // OUT2 cleared: force re-arm on next enable
 }
 
-static void com1_apply_config(void)
-{
+static void com1_apply_config(void) {
     uint16_t divisor = ((uint16_t)com1_dlm << 8) | com1_dll;
     uint32_t baud = 2400;
     if (likely(divisor != 0)) {
@@ -66,8 +64,7 @@ static void com1_apply_config(void)
     // parity, stop_bits, brk);
 }
 
-void pico_x86_serial_hw_init(void)
-{
+void pico_x86_serial_hw_init(void) {
     if (likely(serial_hw_ready))
         return;
 
@@ -81,8 +78,7 @@ void pico_x86_serial_hw_init(void)
     // printf("[SERIAL DEBUG] UART up: TX=%d RX=%d\n", SERIAL_TX_PIN, SERIAL_RX_PIN);
 }
 
-void __time_critical_func(pico_x86_serial_port_in)(uint16_t port)
-{
+void __time_critical_func(pico_x86_serial_port_in)(uint16_t port) {
     if (unlikely(!serial_hw_ready))
         pico_x86_serial_hw_init();
 
@@ -96,10 +92,10 @@ void __time_critical_func(pico_x86_serial_port_in)(uint16_t port)
 
             // PL011 DR error bits -> 16550 LSR bit positions (OE=1, PE=2, FE=3, BI=4).
             // Latched here and held until LSR is read, matching real 8250/16550 behavior.
-            com1_lsr_err_latch |= (uint8_t)((((raw >> 11) & 1) << 1) // OE
-                | (((raw >> 9) & 1) << 2) // PE
-                | (((raw >> 8) & 1) << 3) // FE
-                | (((raw >> 10) & 1) << 4)); // BE -> BI
+            com1_lsr_err_latch |= (uint8_t)((((raw >> 11) & 1) << 1)     // OE
+                                            | (((raw >> 9) & 1) << 2)    // PE
+                                            | (((raw >> 8) & 1) << 3)    // FE
+                                            | (((raw >> 10) & 1) << 4)); // BE -> BI
 
             com1_rx_irq_pending = false;
             //     printf("[SERIAL DEBUG] port IN 0x3F8: raw DR=%08lx (OE=%d BE=%d PE=%d FE=%d "
@@ -125,8 +121,8 @@ void __time_critical_func(pico_x86_serial_port_in)(uint16_t port)
         io_ports[port] = com1_mcr;
         break;
     case 0x3FD: // LSR
-        io_ports[port] = (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00)
-            | (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00) | com1_lsr_err_latch;
+        io_ports[port] = (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00) |
+                         (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00) | com1_lsr_err_latch;
         com1_lsr_err_latch = 0; // Reading LSR clears OE/PE/FE/BI, per 16550 spec
         break;
     case 0x3FE: // MSR -- no real modem lines; report CTS/DSR/DCD asserted
@@ -138,8 +134,7 @@ void __time_critical_func(pico_x86_serial_port_in)(uint16_t port)
     }
 }
 
-void __time_critical_func(pico_x86_serial_port_out)(uint16_t port)
-{
+void __time_critical_func(pico_x86_serial_port_out)(uint16_t port) {
     if (unlikely(!serial_hw_ready))
         pico_x86_serial_hw_init();
 
@@ -189,28 +184,27 @@ void __time_critical_func(pico_x86_serial_port_out)(uint16_t port)
     case 0x3FC: // MCR -- RTS/DTR/OUT1/OUT2/loopback bits
         com1_set_mcr(val);
         break;
-    case 0x3FD: // LSR
+    case 0x3FD:          // LSR
         [[fallthrough]]; // Read-only
-    case 0x3FE: // MSR
+    case 0x3FE:          // MSR
         [[fallthrough]]; // Read-only
-    case 0x3FF: // Scratch register
+    case 0x3FF:          // Scratch register
         [[fallthrough]]; // Read-only
     default:
         break;
     }
 }
 
-void pico_x86_serial_ctl(void)
-{
-    uint8_t ah = regs8[REG_AH];
-    uint16_t port = regs16[REG_DX];
+void pico_x86_serial_ctl(void) {
+    uint8_t ah = CPU.AH;
+    uint16_t port = (CPU.DX);
 
-    // printf("[SERIAL DEBUG] entry: AH=%02x AL=%02x DX=%04x\n", ah, regs8[REG_AL], port);
+    // printf("[SERIAL DEBUG] entry: AH=%02x AL=%02x DX=%04x\n", ah, CPU.AL, port);
 
     // We support only COM1
     if (unlikely(port != 0)) {
         // printf("[SERIAL DEBUG] port %04x != 0, reporting not-present\n", port);
-        regs8[REG_AH] = 0x80; // Timeout / port not present
+        CPU.AH = 0x80; // Timeout / port not present
         return;
     }
 
@@ -219,8 +213,8 @@ void pico_x86_serial_ctl(void)
     switch (ah) {
     case 0x00: { // Initialize port: AL = line control byte
         // static const uint32_t baud_table[8] = { 110, 150, 300, 600, 1200, 2400, 4800, 9600 };
-        static const uint16_t divisor_table[8] = { 1047, 768, 384, 192, 96, 48, 24, 12 };
-        uint8_t al = regs8[REG_AL];
+        static const uint16_t divisor_table[8] = {1047, 768, 384, 192, 96, 48, 24, 12};
+        uint8_t al = CPU.AL;
         uint8_t baud_sel = (al >> 5) & 7;
         // uint32_t data_bits = 5 + (al & 3);
         // uint32_t stop_bits = (al & 4) ? 2 : 1;
@@ -250,16 +244,16 @@ void pico_x86_serial_ctl(void)
         com1_lcr = (al & 0x07) | lcr_parity_bits; // DLAB stays 0
         com1_apply_config();
 
-        regs8[REG_AH] = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00)
-            | (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
-        regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
+        CPU.AH = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00) |
+                 (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
+        CPU.AL = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
         // printf("[SERIAL DEBUG] init: baud=%d data_bits=%d stop_bits=%d parity=%d "
         //    "-> AH=%02x\n",
-        // baud_table[baud_sel], data_bits, stop_bits, parity, regs8[REG_AH]);
+        // baud_table[baud_sel], data_bits, stop_bits, parity, CPU.AH);
         break;
     }
     case 0x01: { // Send character in AL
-        uint8_t ch = regs8[REG_AL];
+        uint8_t ch = CPU.AL;
         absolute_time_t deadline = make_timeout_time_ms(100);
         while (!uart_is_writable(SERIAL_UART_ID) && !time_reached(deadline))
             tight_loop_contents();
@@ -267,12 +261,12 @@ void pico_x86_serial_ctl(void)
         bool writable = uart_is_writable(SERIAL_UART_ID);
         if (likely(writable)) {
             uart_putc_raw(SERIAL_UART_ID, ch);
-            regs8[REG_AH] = 0x60; // THRE + TSRE, no errors
+            CPU.AH = 0x60; // THRE + TSRE, no errors
         } else {
-            regs8[REG_AH] = 0x80; // Timeout
+            CPU.AH = 0x80; // Timeout
         }
         // printf("[SERIAL DEBUG] send: ch=%02x writable=%d -> AH=%02x\n", ch, writable,
-        // regs8[REG_AH]);
+        // CPU.AH);
         break;
     }
     case 0x02: { // Receive character into AL
@@ -283,24 +277,24 @@ void pico_x86_serial_ctl(void)
         bool readable = uart_is_readable(SERIAL_UART_ID);
         if (likely(readable)) {
             uint32_t raw = uart_get_hw(SERIAL_UART_ID)->dr;
-            regs8[REG_AL] = raw & 0xFF;
-            regs8[REG_AH] = 0x00;
+            CPU.AL = raw & 0xFF;
+            CPU.AH = 0x00;
             // printf("[SERIAL DEBUG] recv raw DR=%08lx (OE=%d BE=%d PE=%d FE=%d
             // data=%02x)\n", (unsigned long)raw, (raw >> 11) & 1, (raw >> 10) & 1, (raw >>
             // 9) & 1, (raw >> 8) & 1, raw & 0xFF);
             com1_rx_irq_pending = false;
         } else {
-            regs8[REG_AH] = 0x80; // Timeout, no data received
+            CPU.AH = 0x80; // Timeout, no data received
         }
         // printf("[SERIAL DEBUG] recv: readable=%d -> AH=%02x AL=%02x\n", readable,
-        // regs8[REG_AH], regs8[REG_AL]);
+        // CPU.AH, CPU.AL);
         break;
     }
     case 0x03: { // Query port status
-        regs8[REG_AH] = (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00)
-            | (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00);
-        regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
-        printf("[SERIAL DEBUG] status -> AH=%02x\n", regs8[REG_AH]);
+        CPU.AH = (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00) |
+                 (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00);
+        CPU.AL = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
+        printf("[SERIAL DEBUG] status -> AH=%02x\n", CPU.AH);
         break;
     }
     case 0x04: { // Extended Initialize (PS/2-style)
@@ -309,13 +303,13 @@ void pico_x86_serial_ctl(void)
         // CH = data bits (5-8)
         // CL = baud rate code (0=110,1=150,2=300,3=600,4=1200,
         //      5=2400,6=4800,7=9600,8=19200)
-        static const uint16_t ext_divisor_table[9] = { 1047, 768, 384, 192, 96, 48, 24, 12, 6 };
-        static const uint8_t ext_parity_bits[5] = { 0x00, 0x08, 0x18, 0x28, 0x38 };
+        static const uint16_t ext_divisor_table[9] = {1047, 768, 384, 192, 96, 48, 24, 12, 6};
+        static const uint8_t ext_parity_bits[5] = {0x00, 0x08, 0x18, 0x28, 0x38};
 
-        uint8_t bh = regs8[REG_BH];
-        uint8_t bl = regs8[REG_BL];
-        uint8_t ch = regs8[REG_CH];
-        uint8_t cl = regs8[REG_CL];
+        uint8_t bh = CPU.BH;
+        uint8_t bl = CPU.BL;
+        uint8_t ch = CPU.CH;
+        uint8_t cl = CPU.CL;
 
         if (cl > 8)
             cl = 8;
@@ -332,34 +326,33 @@ void pico_x86_serial_ctl(void)
         com1_lcr = (uint8_t)((ch - 5) | ((bl & 1) << 2) | ext_parity_bits[bh]);
         com1_apply_config();
 
-        regs8[REG_AH] = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00)
-            | (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
-        regs8[REG_AL] = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
+        CPU.AH = (uart_is_writable(SERIAL_UART_ID) ? 0x60 : 0x00) |
+                 (uart_is_readable(SERIAL_UART_ID) ? 0x01 : 0x00);
+        CPU.AL = 0xB0; // Fake MSR: CTS/DSR/DCD asserted
         printf("[SERIAL DEBUG] ext init: divisor=%u lcr=%02x -> AH=%02x\n", divisor, com1_lcr,
-            regs8[REG_AH]);
+               CPU.AH);
         break;
     }
     case 0x05: { // Modem Control Register access (PS/2-style)
         // AL = 00h read MCR (-> BL = current value)
         //    = 01h write MCR (BL = new value)
-        if (regs8[REG_AL] == 0x01) {
-            com1_set_mcr(regs8[REG_BL]);
+        if (CPU.AL == 0x01) {
+            com1_set_mcr(CPU.BL);
         } else {
-            regs8[REG_BL] = com1_mcr;
-            regs8[REG_BH] = 0;
+            CPU.BL = com1_mcr;
+            CPU.BH = 0;
         }
-        regs8[REG_AH] = 0;
+        CPU.AH = 0;
         break;
     }
     default:
         printf("[SERIAL DEBUG] unknown AH=%02x -> reporting 0x80\n", ah);
-        regs8[REG_AH] = 0x80;
+        CPU.AH = 0x80;
         break;
     }
 }
 
-bool __time_critical_func(pico_x86_serial_int_pending)(void)
-{
+bool __time_critical_func(pico_x86_serial_int_pending)(void) {
     bool out2_set = (com1_mcr & 0x08) != 0; // OUT2 gates the IRQ line on real 16550s
 
     if (out2_set && (com1_ier & 0x01) && uart_is_readable(SERIAL_UART_ID) && !com1_rx_irq_pending) {

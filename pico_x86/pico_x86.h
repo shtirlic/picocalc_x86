@@ -43,13 +43,15 @@
 #define GENMASK(h, l) (((~0UL) - (1UL << (l)) + 1) & (~0UL >> (32 - 1 - (h))))
 
 // Emulator system constants
+#define BIOS_LOAD_OFFSET 0x100
+#define BIOS_MAX_SIZE (0x4000 - BIOS_LOAD_OFFSET - 16)
+
 #define IO_PORT_COUNT 0x400
 #define RAM_SIZE 0x74000
 #define REGS_BASE 0x70000
 #define LOW_MEM_LIMIT 0x6C000 // Available memrory to DOS
 
-static uint32_t __always_inline MAP_ADDR(uint32_t A)
-{
+static uint32_t __always_inline MAP_ADDR(uint32_t A) {
     A &= 0xFFFFF;
 
     // Direct map
@@ -91,8 +93,10 @@ enum reg16 {
 
     // --- Emulator-Specific Virtual Registers ---
     REG_ZERO, // Virtual Zero: An internal emulator shortcut representing a hardcoded zero value.
-    REG_SCRATCH // Scratchpad: An internal temporary register used by the emulator for complex macro
+    REG_SCRATCH, // Scratchpad: An internal temporary register used by the emulator for complex macro
                 // calculations.
+    REG_IP //  Instruction Pointer (IP) register. It holds the offset address of the next instruction
+          // waiting to be fetched and executed from the Code Segment (CS)
 };
 
 // 8-bit register decodes
@@ -143,9 +147,86 @@ enum flag_update_type {
     FLAGS_UPDATE_AO_ARITH = 2, // Update Aux and Overflow (Math ops).
     FLAGS_UPDATE_OC_LOGIC = 4 // Clear Overflow and Carry (Logic ops).
 };
+// clang-format on
+
+// opcode
+typedef struct __attribute__((aligned(4))) {
+    union {
+        uint32_t opcode_entry;
+        struct {
+            uint8_t xlat_id;
+            uint8_t subfn;
+            uint8_t flags;
+            uint8_t mod_size;
+        };
+    };
+} opcode_decode_t;
+
+typedef struct __attribute__((aligned(2))) {
+    uint8_t base_size;
+    uint8_t w_size;
+} inst_size_t;
+
+// cpu regs
+typedef struct __attribute__((packed, aligned(2))) {
+    union {
+        uint16_t AX;
+        struct {
+            uint8_t AL, AH;
+        };
+    };
+    union {
+        uint16_t CX;
+        struct {
+            uint8_t CL, CH;
+        };
+    };
+    union {
+        uint16_t DX;
+        struct {
+            uint8_t DL, DH;
+        };
+    };
+    union {
+        uint16_t BX;
+        struct {
+            uint8_t BL, BH;
+        };
+    };
+    uint16_t SP;
+    uint16_t BP;
+    uint16_t SI;
+    uint16_t DI;
+    uint16_t ES;
+    uint16_t CS;
+    uint16_t SS;
+    uint16_t DS;
+    uint16_t ZERO;
+    uint16_t SCRATCH;
+    uint16_t IP;
+    uint8_t padding[10];
+    uint8_t CF;
+    uint8_t PF;
+    uint8_t AF;
+    uint8_t ZF;
+    uint8_t SF;
+    uint8_t TF;
+    uint8_t IF;
+    uint8_t DF;
+    uint8_t OF;
+} cpu_t;
+
+#define CPU (*((cpu_t *)regs16))
 
 extern int32_t picocalc_southbridge_kb_read(void);
+
+// Power button short-press behavior
+enum power_button_action { POWER_ACTION_REBOOT = 0, POWER_ACTION_SCREENSHOT = 1 };
 
 void pico_x86_run(void);
 void pico_x86_cpu(void);
 void pico_x86_timer_tick(void);
+uint8_t pico_x86_get_floppy_enabled(void);
+void pico_x86_set_floppy_enabled(uint8_t enabled);
+uint8_t pico_x86_get_power_action(void);
+void pico_x86_set_power_action(uint8_t action);
