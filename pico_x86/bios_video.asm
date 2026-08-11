@@ -240,6 +240,15 @@ int10_switch_to_cga_gfx:
 	mov	[es:vidmode-bios_data], al	      ; Save the requested video mode (4, 5, or 6) to BDA
 	mov	word [es:0x63], 0x3D4             ; Set CRTC base port in BDA to CGA (Color)
 
+	cmp	al, 6
+	je	.set_80_cols
+	mov	word [es:vid_cols-bios_data], 40
+	mov	word [es:page_size-bios_data], 0x4000
+	jmp	.continue_gfx
+.set_80_cols:
+	mov	word [es:vid_cols-bios_data], 80
+	mov	word [es:page_size-bios_data], 0x4000
+.continue_gfx:
 
 	mov	dx, 0x3d4
 	mov	al, 0		; R0: H Total
@@ -1186,8 +1195,10 @@ int10_write_char_common:
 	mov	al, [cs:gfx_rep_char]
 	mov	bl, [cs:gfx_rep_attr]
 	mov	cl, [cs:gfx_col]
+    push	dx
 	mov	dl, [cs:gfx_row]
 	call	plot_char_gfx
+    pop	dx
 
 	inc	byte [cs:gfx_col]
 	dec	dx
