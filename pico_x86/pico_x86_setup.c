@@ -460,11 +460,14 @@ static void draw_award_menu(page_id_t page, int cursor) { pages[page].draw(curso
 static uint8_t wait_key(void) {
     for (;;) {
         sleep_ms(10);
-        int32_t event = picocalc_southbridge_kb_read();
-        if (event == -1 || KBD_GET_STATE(event) == KBD_STATE_RELEASE) {
-            continue;
+
+        static int32_t kbd_event = 0;
+        if (queue_try_remove(kbd_queue, &kbd_event)) {
+            if (KBD_GET_STATE(kbd_event) == KBD_STATE_RELEASE) {
+                continue;
+            }
+            return (uint8_t)(kbd_event & 0xFF);
         }
-        return (uint8_t)(event & 0xFF);
     }
 }
 
@@ -517,19 +520,8 @@ static uint8_t commit_and_exit(const setup_config_t *cfg) {
         aon_timer_start_calendar(&t);
     }
 
-    int released = 0;
-    int idle = 0;
-    while (!released || idle < 5) {
-        int32_t event = picocalc_southbridge_kb_read();
-        if (event != -1) {
-            idle = 0;
-            if (KBD_GET_STATE(event) == KBD_STATE_RELEASE) {
-                released = 1;
-            }
-        } else {
-            idle++;
-        }
-        sleep_ms(10);
+    while (queue_try_remove(kbd_queue, nullptr)) {
+        sleep_ms(30);
     }
     return cfg->fd_first ? 0x00 : 0x80;
 }
