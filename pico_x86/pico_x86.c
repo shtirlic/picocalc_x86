@@ -27,7 +27,9 @@
 #include "pico_x86_setup.h"
 #include "pico_x86_video.h"
 
-uint8_t __aligned(4) mem[RAM_SIZE + 16] = {0};
+static uint8_t __aligned(4) sram[RAM_SIZE] = {0};
+uint8_t __scratch_y("cpu") * mem;
+
 uint8_t __aligned(4) __scratch_x("io") io_ports[IO_PORT_COUNT] = {0};
 
 // Group 1: ModR/M Decode (Tables 0-7) - Indexed by 3-bit i_rm (0-7)
@@ -43,7 +45,6 @@ static inst_size_t __scratch_y("cpu") inst_size_table[256];
 static uint8_t __scratch_y("cpu") jmp_decode_table[4][8];
 
 static opcode_decode_t __scratch_y("cpu") CPU_OPCODE = {0};
-static inst_size_t __scratch_y("cpu") size;
 
 static uint8_t __scratch_y("cpu") * opcode_stream, raw_opcode_id,
     seg_override_en, i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit, rep_mode,
@@ -53,7 +54,7 @@ uint8_t *__scratch_y("cpu") regs8 = nullptr;
 static uint8_t power_action = POWER_ACTION_REBOOT;
 
 uint16_t *__scratch_y("cpu") regs16 = nullptr;
-static uint16_t __scratch_y("cpu") seg_override;
+uint16_t __scratch_y("cpu") seg_override;
 
 static uint32_t __scratch_y("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint;
@@ -181,15 +182,15 @@ static void __always_inline(make_flags)() {
 
 // Set emulated CPU FLAGS register
 static void __always_inline set_flags(int32_t new_flags) {
-    CPU.CF = !!(new_flags & BIT(0));
-    CPU.PF = !!(new_flags & BIT(2));
-    CPU.AF = !!(new_flags & BIT(4));
-    CPU.ZF = !!(new_flags & BIT(6));
-    CPU.SF = !!(new_flags & BIT(7));
-    CPU.TF = !!(new_flags & BIT(8));
-    CPU.IF = !!(new_flags & BIT(9));
-    CPU.DF = !!(new_flags & BIT(10));
-    CPU.OF = !!(new_flags & BIT(11));
+    CPU.CF = new_flags & 1;
+    CPU.PF = (new_flags >> 2) & 1;
+    CPU.AF = (new_flags >> 4) & 1;
+    CPU.ZF = (new_flags >> 6) & 1;
+    CPU.SF = (new_flags >> 7) & 1;
+    CPU.TF = (new_flags >> 8) & 1;
+    CPU.IF = (new_flags >> 9) & 1;
+    CPU.DF = (new_flags >> 10) & 1;
+    CPU.OF = (new_flags >> 11) & 1;
 }
 
 // Convert raw opcode to translated opcode index. This condenses a large number
@@ -213,8 +214,7 @@ static char __time_critical_func(pc_interrupt)(uint8_t interrupt_num) {
     // if (interrupt_num == 0x10 && CPU.AH != 0x0E) {
     //     printf("Int: %x, AH=%x AL=%x \n", interrupt_num, CPU.AH, CPU.AL);
     // }
-    trap_flag = 0;
-    return CPU.TF = CPU.IF = 0;
+    return CPU.TF = CPU.IF = trap_flag = 0;
 }
 
 // AAA and AAS instructions - op is +1 for AAA, and -1 for AAS
@@ -327,6 +327,8 @@ static void __always_inline __isr isr() {
 
 void pico_x86_run() {
     printf("\n▼ Memory Size %d: bytes\n", RAM_SIZE);
+
+    mem = sram;
 
     // regs16 and regs8 point to F000:0, the start of memory-mapped registers.
     regs16 = (uint16_t *)(regs8 = mem + REGS_BASE);
@@ -1234,10 +1236,9 @@ next_opcode:
     // Memory guard agains probing more than RAM_SIZE
     *(uint32_t *)(mem + RAM_SIZE) = 0xFFFFFFFF;
 
-    size = inst_size_table[raw_opcode_id];
-
     CPU.IP += (((i_mod * (i_mod != 3)) + ((!i_mod && i_rm == 6) << 1)) * CPU_OPCODE.mod_size) +
-              size.base_size + (size.w_size * (i_w + 1));
+              inst_size_table[raw_opcode_id].base_size +
+              (inst_size_table[raw_opcode_id].w_size * (i_w + 1));
 
     // If instruction needs to update SF, ZF and PF, set them as appropriate
     if (CPU_OPCODE.flags & FLAGS_UPDATE_SZP) {

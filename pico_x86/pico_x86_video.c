@@ -8,8 +8,9 @@
 #include "pico_x86_video.h"
 #include <hardware/timer.h>
 #include <stdint.h>
+#include <sys/cdefs.h>
 
-extern uint8_t mem[];
+extern uint8_t *mem;
 extern uint8_t io_ports[];
 // extern uint16_t regs16[];
 // extern uint16_t reg_ip;
@@ -61,7 +62,7 @@ static void __time_critical_func(update_text_geometry)() {
     }
 }
 
-static void __time_critical_func(update_crtc_frame_timing)() {
+static void __always_inline update_crtc_frame_timing() {
     if (crtc.dr_vert_total == 0) {
         return;
     }
@@ -496,15 +497,15 @@ static void __time_critical_func(pico_x86_video_cga_render_scanline)() {
     ma_row_start = base_addr + (row_index * cols);
 
     if (likely(crtc.mcr_video_output)) {
-        if (is_text_mode) {
+        if (likely(is_text_mode)) {
             render_text_scanline(active_y);
         } else {
             render_cga_graphics_scanline(active_y);
         }
     } else {
-        for (uint32_t i = 0; i < video_config->screen_width; i++) {
-            video_config->display_put_pixel_callback(bg_color_border);
-        }
+        // for (uint32_t i = 0; i < video_config->screen_width; i++) {
+        //     video_config->display_put_pixel_callback(bg_color_border);
+        // }
     }
 }
 

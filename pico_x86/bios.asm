@@ -76,9 +76,9 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Rev 0.9', 0, 0
+biosstr db	'PicoCalc x86 BIOS Rev.05 ', 0, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/10/26', 0, 0xfa, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/13/26', 0, 0xfa, 0
 
 bios_entry:
 
@@ -262,7 +262,7 @@ boot:
 	rep	movsb
 
 	mov	ah, 0x00
-	mov	al, [es:vidmode-bios_data]	; Mode 3: 80x25 16-color text (default PC boot mode)
+	mov	al, [es:vidmode-bios_data]	; (default PC boot mode)
 	int	0x10
 
     ; Set up some I/O ports, between 0 and 0x3FF.
@@ -315,15 +315,16 @@ next_out:
 	cmp	dx, 0x3D8	; CGA Mode Control
 	je	next_out
 
+	cmp	dx, 0x3DA	; CGA refresh port
+	je	next_out
+
+
 	out	dx, al
 
 	cmp	dx, 0x3FF ; up to 1024 ports
 	jl	next_out
 
 	mov	al, 0
-
-	mov	dx, 0x3DA	; CGA refresh port
-	out	dx, al
 
 	mov	dx, 0x3BC	; LPT1
 	out	dx, al

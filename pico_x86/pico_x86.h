@@ -45,32 +45,37 @@
 // Emulator system constants
 #define BIOS_LOAD_OFFSET 0x100
 #define BIOS_MAX_SIZE (0x4000 - BIOS_LOAD_OFFSET - 16)
+#define BIOS_SEGMENT 0xF0000
 
-#define IO_PORT_COUNT 0x400
-#define RAM_SIZE 0x74000
-#define REGS_BASE 0x70000
-#define LOW_MEM_LIMIT 0x6C000 // Available memrory to DOS
+#define CGA_WINDOW_START 0xB8000
+#define CGA_WINDOW_END 0xBC000
+
+#define IO_PORT_COUNT 0x400   // Supported ports 1024
+#define LOW_MEM_LIMIT 0x6C000 // Available memrory to DOS 432KB
+#define REGS_BASE (LOW_MEM_LIMIT + CGA_WINDOW_END - CGA_WINDOW_START)
+#define REGS_BIOS_WINDOW 0x4000 // CPU regs and BIOS
+#define RAM_SIZE REGS_BASE + REGS_BIOS_WINDOW + 4
 
 static uint32_t __always_inline MAP_ADDR(uint32_t A) {
     A &= 0xFFFFF;
 
-    // Direct map
     if (likely(A < LOW_MEM_LIMIT)) {
         return A;
     }
 
-    // CGA VRAM (Strictly 16KB: 0xB8000-0xBBFFF)
-    if (A >= 0xB8000 && A < 0xBC000) {
-        return 0x6C000 + (A - 0xB8000);
+    if (A >= CGA_WINDOW_START && A < CGA_WINDOW_END) {
+        return LOW_MEM_LIMIT + (A - CGA_WINDOW_START);
     }
 
-    // BIOS ROM F0000-FFFFF (Aliased into 16KB physical space)
-    if (A >= 0xF0000) {
-        return 0x70000 + ((A - 0xF0000) & 0x3FFF);
+    if (A >= BIOS_SEGMENT) {
+        uint32_t offset = (A - BIOS_SEGMENT) & 0x3FFF;
+        if (unlikely(offset < BIOS_LOAD_OFFSET)) {
+            return RAM_SIZE;
+        }
+        return REGS_BASE + offset;
     }
 
-    // all other unmapped memory
-    return 0x74000 + (A & 3);
+    return RAM_SIZE;
 }
 
 // clang-format off
@@ -205,10 +210,12 @@ typedef struct __attribute__((packed, aligned(2))) {
     uint16_t SCRATCH;
     uint16_t IP;
     uint8_t padding[10];
+
     uint8_t CF;
     uint8_t PF;
     uint8_t AF;
     uint8_t ZF;
+
     uint8_t SF;
     uint8_t TF;
     uint8_t IF;

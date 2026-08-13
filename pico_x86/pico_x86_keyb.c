@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <sys/cdefs.h>
 
-extern uint8_t mem[];
+extern uint8_t *mem;
 
 #define BDA_SEG_BASE 0x400
 #define BDA(ofs) (BDA_SEG_BASE + (ofs))
@@ -28,34 +28,35 @@ extern uint8_t mem[];
 #define MOD_CAPSLOCK 0x40
 
 // XT scancode -> ASCII, indexed by scancode with the break bit stripped
-static const uint8_t scan_to_ascii_unshifted[128] = { 0, 27, '1', '2', '3', '4', '5', '6', '7', '8',
-    '9', '0', '-', '=', 8, 9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 13, 0,
-    'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\', 'z', 'x', 'c', 'v', 'b',
-    'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '7', '8', '9',
-    '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+static const uint8_t scan_to_ascii_unshifted[128] = {
+    0,   27,  '1',  '2', '3', '4',  '5', '6', '7', '8', '9', '0', '-', '=', 8,   9,   'q', 'w', 'e',
+    'r', 't', 'y',  'u', 'i', 'o',  'p', '[', ']', 13,  0,   'a', 's', 'd', 'f', 'g', 'h', 'j', 'k',
+    'l', ';', '\'', '`', 0,   '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,   '*', 0,
+    ' ', 0,   0,    0,   0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   '7', '8', '9', '-', '4',
+    '5', '6', '+',  '1', '2', '3',  '0', '.', 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,    0,   0,   0,    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,    0,   0,   0,    0,   0,   0,   0,   0,   0,   0,   0};
 
-static const uint8_t scan_to_ascii_shifted[128] = { 0, 27, '!', '@', '#', '$', '%', '^', '&', '*',
-    '(', ')', '_', '+', 8, 9, 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 13, 0,
-    'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|', 'Z', 'X', 'C', 'V', 'B',
-    'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '7', '8', '9',
-    '-', '4', '5', '6', '+', '1', '2', '3', '0', '.', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+static const uint8_t scan_to_ascii_shifted[128] = {
+    0,   27,  '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 8,   9,   'Q', 'W', 'E',
+    'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 13,  0,   'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K',
+    'L', ':', '"', '~', 0,   '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0,   '*', 0,
+    ' ', 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   '7', '8', '9', '-', '4',
+    '5', '6', '+', '1', '2', '3', '0', '.', 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0};
 
-static uint16_t __always_inline bda_read16(uint32_t addr)
-{
+static uint16_t __always_inline bda_read16(uint32_t addr) {
     return mem[addr] | ((uint16_t)mem[addr + 1] << 8);
 }
 
-static void __always_inline bda_write16(uint32_t addr, uint16_t value)
-{
+static void __always_inline bda_write16(uint32_t addr, uint16_t value) {
     mem[addr] = (uint8_t)value;
     mem[addr + 1] = (uint8_t)(value >> 8);
 }
 
 // Insert into the BIOS keyboard ring buffer
-static void __always_inline kb_buffer_insert(uint8_t al, uint8_t ah)
-{
+static void __always_inline kb_buffer_insert(uint8_t al, uint8_t ah) {
     uint16_t tail = bda_read16(BDA(BDA_KB_TAIL_OFS));
     uint16_t head = bda_read16(BDA(BDA_KB_HEAD_OFS));
 
@@ -73,8 +74,7 @@ static void __always_inline kb_buffer_insert(uint8_t al, uint8_t ah)
 }
 
 // Shift/Ctrl/Alt press+release and Caps Lock toggle
-static int __always_inline kb_update_modifiers(uint8_t code, uint8_t released)
-{
+static int __always_inline kb_update_modifiers(uint8_t code, uint8_t released) {
     uint8_t bit;
 
     switch (code) {
@@ -109,8 +109,7 @@ static int __always_inline kb_update_modifiers(uint8_t code, uint8_t released)
 }
 
 // F-keys, arrows, nav keys, and numpad -/+ : scancodes 0x3B and above
-static void kb_decode_special(uint8_t code, uint8_t flags)
-{
+static void kb_decode_special(uint8_t code, uint8_t flags) {
     if (code >= 0x3B && code <= 0x44) {
         uint8_t ah = code;
         uint8_t both_shifts = (flags & (MOD_LSHIFT | MOD_RSHIFT)) == (MOD_LSHIFT | MOD_RSHIFT);
@@ -165,8 +164,7 @@ static void kb_decode_special(uint8_t code, uint8_t flags)
 }
 
 // Scancodes below 0x3B: translate to ASCII using the current modifier state
-static void kb_decode_normal(uint8_t code, uint8_t flags)
-{
+static void kb_decode_normal(uint8_t code, uint8_t flags) {
     if (flags & MOD_ALT) {
         kb_buffer_insert(0x00, code);
         return;
@@ -191,8 +189,7 @@ static void kb_decode_normal(uint8_t code, uint8_t flags)
     kb_buffer_insert(al, code);
 }
 
-void __time_critical_func(pico_x86_keyb_process_scancode)(uint8_t raw_code)
-{
+void __time_critical_func(pico_x86_keyb_process_scancode)(uint8_t raw_code) {
     uint8_t released = raw_code & 0x80;
     uint8_t code = raw_code & 0x7F;
 

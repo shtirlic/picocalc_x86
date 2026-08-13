@@ -14,7 +14,7 @@
 #include "pico_x86_video.h"
 #include "picocalc_southbridge.h"
 
-extern uint8_t mem[];
+extern uint8_t *mem;
 extern uint8_t io_ports[];
 
 #define CGA_COLS 80
