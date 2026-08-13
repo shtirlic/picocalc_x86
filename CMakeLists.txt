@@ -50,7 +50,6 @@ target_compile_definitions(picocalc_x86 PRIVATE
     BIOS_EMBED_ONLY
     PICO_SYS_CLOCK_MHZ=250
     PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64
-    # DEBUG_PERF
     # DEBUG_KBD
     # DEBUG_CONSOLE
 )
@@ -93,6 +92,7 @@ target_link_libraries(picocalc_x86
     pico_x86
     picocalc_display
 	picocalc_southbridge
+    pico_util
 	)
 
 pico_enable_stdio_usb(picocalc_x86 0)

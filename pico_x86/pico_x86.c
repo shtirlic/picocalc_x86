@@ -11,7 +11,8 @@
 #include "hardware/sync.h"
 #include "hardware/watchdog.h"
 #include "pico/aon_timer.h"
-
+#include "pico/util/queue.h"
+#include <pico/platform/sections.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,8 +28,8 @@
 #include "pico_x86_setup.h"
 #include "pico_x86_video.h"
 
-static uint8_t __aligned(4) sram[RAM_SIZE] = {0};
-uint8_t __scratch_y("cpu") * mem;
+static uint8_t __aligned(4) sram[RAM_SIZE];
+uint8_t __scratch_y("cpu") *mem = nullptr;
 
 uint8_t __aligned(4) __scratch_x("io") io_ports[IO_PORT_COUNT] = {0};
 
@@ -63,6 +64,9 @@ int32_t __scratch_y("cpu") op_result, scratch_int;
 struct timespec __scratch_y() ts;
 struct tm __scratch_y() clock_tm;
 static bool __scratch_y() isr_ready;
+
+static queue_t __scratch_y() local_kbd_queue;
+queue_t __scratch_y() *kbd_queue = nullptr;
 
 // Helper macros
 
@@ -263,8 +267,8 @@ static void __always_inline io_port_out(uint32_t port, uint8_t val) {
 
 // PicoCalc specific keyboard handling
 static void keyboard_process() {
-    int32_t kbd_event = picocalc_southbridge_kb_read();
-    if (unlikely(kbd_event != -1)) {
+    static int32_t kbd_event = 0;
+    if (unlikely(queue_try_remove(kbd_queue, &kbd_event))) {
         uint8_t scancode = kbd_event & 0xFF;
 
         // PicoCalc: Reboot/Screenshot on short press power key
@@ -290,11 +294,6 @@ static void keyboard_process() {
 extern FATFS fs;
 extern const uint8_t binary_bios_bin_start[];
 extern const uint8_t binary_bios_bin_end[];
-
-#ifdef DEBUG_PERF
-static uint64_t start_time = 0;
-static uint32_t sample_instructions = 0;
-#endif
 
 static FIL fpd, fpfd;
 static FRESULT fr;
@@ -440,6 +439,9 @@ void pico_x86_run() {
         }
     }
     pico_x86_pit_init();
+    if (queue_init(&local_kbd_queue, sizeof(int32_t), 16)) {
+        kbd_queue = &local_kbd_queue;
+    }
     pico_x86_cpu();
 }
 
@@ -1272,22 +1274,10 @@ next_opcode:
         isr();
     }
 
-#ifdef DEBUG_PERF
-    if (unlikely(sample_instructions++ >= 1000000)) {
-        if (start_time != 0) {
-            float mips = 1000000.0f / (time_us_64() - start_time);
-            float equivalent_mhz = mips * 14.45f;
-            printf("Perf: %.2f MIPS | Hardware: %.2f MHz\n ", mips, equivalent_mhz);
-        }
-        start_time = time_us_64();
-        sample_instructions = 0;
-    }
-#endif
-
     goto start;
 
 exit_emulation:
-#ifdef DEBUG_PERF
+#ifdef DEBUG_CONSOLE
     printf("\n!!! EMULATOR EXITED MAIN LOOP !!!\n");
     printf("Final CPU State -> CS: %04X | IP: %04X\n\n", CPU.CS, CPU.IP);
 #endif

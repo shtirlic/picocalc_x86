@@ -11,6 +11,7 @@
 #pragma once
 
 #include "hardware/hazard3/features.h"
+#include <pico/util/queue.h>
 #include <stdio.h>
 
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -225,7 +226,7 @@ typedef struct __attribute__((packed, aligned(2))) {
 
 #define CPU (*((cpu_t *)regs16))
 
-extern int32_t picocalc_southbridge_kb_read(void);
+extern queue_t *kbd_queue;
 
 // Power button short-press behavior
 enum power_button_action { POWER_ACTION_REBOOT = 0, POWER_ACTION_SCREENSHOT = 1 };

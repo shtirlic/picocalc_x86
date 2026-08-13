@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "picocalc_southbridge.h"
+#include <hardware/gpio.h>
 #include <pico/stdio.h>
+#include <pico/time.h>
 #include <stdio.h>
 // #include <pico/time.h>
 
@@ -75,8 +77,7 @@ break;
 // clang-format on
 // static uint64_t wait_start = 0;
 
-int32_t __time_critical_func(picocalc_southbridge_kb_read)()
-{
+int32_t __time_critical_func(picocalc_southbridge_kb_read)() {
     if (!sb_initialized) {
         return -1;
     }
@@ -84,7 +85,7 @@ int32_t __time_critical_func(picocalc_southbridge_kb_read)()
     // if ((time_us_64() - wait_start) < 10000)
     // return -1;
 
-    uint8_t msg[1] = { SB_REG_FIF };
+    uint8_t msg[1] = {SB_REG_FIF};
     int32_t retval = i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, msg, 1, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("picocalc_southbridge_kb_read i2c write error\n");
@@ -92,12 +93,19 @@ int32_t __time_critical_func(picocalc_southbridge_kb_read)()
     }
     // wait_start = time_us_64();
 
-    uint8_t buff[2] = { 0 };
+    uint8_t buff[2] = {0};
     retval = i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, buff, 2, false, SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("picocalc_southbridge_kb_read i2c write error\n");
         return -1;
     }
+
+    // uint8_t key_msg[1] = {SB_REG_KEY};
+    // i2c_write_timeout_us(SB_I2C_I, SB_I2C_ADDR, key_msg, 1, false, SB_I2C_TIMEOUT_US);
+    // uint8_t key_buff[2] = {0};
+    // i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, key_buff, 2, false, SB_I2C_TIMEOUT_US);
+    // // if ((key_buff[0] & SB_KEY_COUNT_MASK) > 0) {
+    // // }
 
     if (retval == 2 && ((buff[0] << 8) | buff[1]) != 0) {
         uint8_t key_state = buff[0];
@@ -105,7 +113,7 @@ int32_t __time_critical_func(picocalc_southbridge_kb_read)()
 
 #ifdef DEBUG_KBD
         printf("Raw Key: %x  State: %x, Code: %x \n", (key_code), key_state,
-            translate_kbd_code(key_code) | KBD_MAKE_STATE(key_state));
+               translate_kbd_code(key_code) | KBD_MAKE_STATE(key_state));
 #endif
         return translate_kbd_code(key_code) | KBD_MAKE_STATE(key_state);
     }
@@ -113,12 +121,13 @@ int32_t __time_critical_func(picocalc_southbridge_kb_read)()
     return -1;
 }
 
-void picocalc_southbridge_init()
-{
+void picocalc_southbridge_init() {
     if (sb_initialized) {
         return;
     }
 
+    gpio_set_drive_strength(SB_I2C_SCL, GPIO_DRIVE_STRENGTH_4MA);
+    gpio_set_drive_strength(SB_I2C_SDA, GPIO_DRIVE_STRENGTH_4MA);
     gpio_set_function(SB_I2C_SCL, GPIO_FUNC_I2C);
     gpio_set_function(SB_I2C_SDA, GPIO_FUNC_I2C);
     i2c_init(SB_I2C_I, SB_I2C_SPEED);
@@ -128,8 +137,7 @@ void picocalc_southbridge_init()
     sb_initialized = 1;
 }
 
-int picocalc_southbridge_battery()
-{
+int picocalc_southbridge_battery() {
     uint16_t buff = 0;
     unsigned char msg[2];
     msg[0] = SB_REG_BAT;
@@ -143,8 +151,8 @@ int picocalc_southbridge_battery()
         printf("read_battery i2c write error\n");
         return -1;
     }
-    retval = i2c_read_timeout_us(
-        SB_I2C_I, SB_I2C_ADDR, (unsigned char*)&buff, 2, false, SB_I2C_TIMEOUT_US);
+    retval = i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, (unsigned char *)&buff, 2, false,
+                                 SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("read_battery i2c read error read\n");
         return -1;
@@ -156,8 +164,7 @@ int picocalc_southbridge_battery()
     return -1;
 }
 
-int picocalc_southbridge_backlight(uint8_t val)
-{
+int picocalc_southbridge_backlight(uint8_t val) {
     uint16_t buff = 0;
     unsigned char msg[2];
     msg[0] = SB_REG_BK2;
@@ -173,8 +180,8 @@ int picocalc_southbridge_backlight(uint8_t val)
         printf("read_battery i2c write error\n");
         return -1;
     }
-    retval = i2c_read_timeout_us(
-        SB_I2C_I, SB_I2C_ADDR, (unsigned char*)&buff, 2, false, SB_I2C_TIMEOUT_US);
+    retval = i2c_read_timeout_us(SB_I2C_I, SB_I2C_ADDR, (unsigned char *)&buff, 2, false,
+                                 SB_I2C_TIMEOUT_US);
     if (retval == PICO_ERROR_GENERIC || retval == PICO_ERROR_TIMEOUT) {
         printf("read_battery i2c read error read\n");
         return -1;
