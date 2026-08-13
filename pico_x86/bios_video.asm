@@ -61,8 +61,8 @@ int10:
     push	ax
 
 	; Switch back to CGA Text Mode
-	mov	dx, BDATASEG
-	mov	es, dx
+	push	BDATASEG
+	pop	es
 
 	cmp	al, 0		; Mode 0: 40x25 B&W
 	je	.set_40
@@ -187,8 +187,8 @@ int10:
 
 	pop	ax
 
-	mov	bx, BDATASEG
-	mov	es, bx
+	push	BDATASEG
+	pop	es
 
 	mov	[es:vidmode-bios_data], al
 
@@ -209,8 +209,7 @@ int10:
     mov ah, al
     and ah, 1
     xor ah, 1
-    shl ah, 1
-    shl ah, 1
+    shl ah, 2
 
     ; 80-Column bit (Bit 0)
     shr al, 1
@@ -234,8 +233,8 @@ int10:
 int10_switch_to_cga_gfx:
 	; Switch to True CGA Graphics Mode (320x200 or 640x200)
 
-	mov	dx, BDATASEG
-	mov	es, dx
+	push	BDATASEG
+	pop	es
 
 	mov	[es:vidmode-bios_data], al	      ; Save the requested video mode (4, 5, or 6) to BDA
 	mov	word [es:0x63], 0x3D4             ; Set CRTC base port in BDA to CGA (Color)
@@ -356,8 +355,7 @@ int10_switch_to_cga_gfx:
     ; 1. Calculate the +4 offset for Mode 5
     mov ah, al              ; Save a copy of the mode
     and al, 1               ; Isolate Bit 0 (Yields 1 for Mode 5, 0 for 4/6)
-    shl al, 1               ; Multiply by 2 (8086 compatible)
-    shl al, 1               ; Multiply by 2 again (Total x4)
+    shl al, 2
     add al, 0x2A            ; Base: AL is now 0x2E (Mode 5) or 0x2A (Mode 4/6)
 
     ; 2. Calculate the -14 (0x0E) offset for Mode 6
@@ -397,8 +395,8 @@ int10_set_cshape:
 	push	cx
 	push	dx
 
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 
 	; save the requested start and end scanlines to the BDA
 	mov	[cur_v_start-bios_data], ch
@@ -435,8 +433,8 @@ int10_set_cursor:
 	push	bx
 	push	dx
 
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 
 	; 1. Save to BIOS Data Area (for legacy software reads)
 	mov	[curpos_y-bios_data], dh
@@ -483,8 +481,8 @@ int10_set_cursor:
 
 	push	es
 
-	mov	cx, BDATASEG
-	mov	es, cx
+	push	BDATASEG
+	pop	es
 
     mov ch, [es:cur_v_start-bios_data]
     mov cl, [es:cur_v_end-bios_data]
@@ -502,8 +500,8 @@ int10_set_page:
 	push	cx
 	push	dx
 
-	mov	bx, BDATASEG
-	mov	ds, bx
+	push	BDATASEG
+	pop	ds
 
 	; 1. Save the requested active page (AL) to the BDA
 	mov	[disp_page-bios_data], al
@@ -586,14 +584,11 @@ int10_fast_clear_down:
 	push	es
 	push	ds
 
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 
 	mov	ax, [ds:vmem_offset-bios_data]
-	push	cx
-	mov	cl, 4
-	shr	ax, cl
-	pop	cx
+	shr	ax, 4
 	add	ax, 0xb800
 	mov	es, ax
 
@@ -652,16 +647,13 @@ int10_scroll_up_vmem_update:
 	push	di
 
 	push	ax
-	push	cx
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 	mov	ax, [ds:vmem_offset-bios_data]
-	mov	cl, 4
-	shr	ax, cl
+	shr	ax, 4
 	add	ax, 0xb800
 	mov	es, ax
 	mov	ds, ax
-	pop	cx
 	pop	ax
 
     cls_vmem_scroll_up_next_line:
@@ -674,8 +666,8 @@ cls_vmem_scroll_up_one:
 	mov	al, ch
 
 	push	ds
-	mov	dx, BDATASEG
-	mov	ds, dx
+	push	BDATASEG
+	pop	ds
 	mov	dx, [vid_cols-bios_data]
 	pop	ds
 
@@ -689,8 +681,8 @@ cls_vmem_scroll_up_one:
 	mov	si, ax
 
 	push	ds
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 	mov	ax, [vid_cols-bios_data]
 	shl	ax, 1
 	pop	ds
@@ -784,16 +776,13 @@ int10_scroll_down_vmem_update:
 	push	di
 
 	push	ax
-	push	cx
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 	mov	ax, [ds:vmem_offset-bios_data]
-	mov	cl, 4
-	shr	ax, cl
+	shr	ax, 4
 	add	ax, 0xb800
 	mov	es, ax
 	mov	ds, ax
-	pop	cx
 	pop	ax
 
     cls_vmem_scroll_down_next_line:
@@ -806,8 +795,8 @@ int10_scroll_down_vmem_update:
 	mov	al, dh		; End row number is now in AX
 
 	push	ds
-	mov	dx, BDATASEG
-	mov	ds, dx
+	push	BDATASEG
+	pop	ds
 	mov	dx, [vid_cols-bios_data]
 	pop	ds
 
@@ -821,8 +810,8 @@ int10_scroll_down_vmem_update:
 	mov	si, ax
 
 	push	ds
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 	mov	ax, [vid_cols-bios_data]
 	shl	ax, 1
 	pop	ds
@@ -884,11 +873,11 @@ int10_scroll_down_vmem_update:
 	push	bx
 	push	dx
 
-	mov	bx, BDATASEG
-	mov	es, bx
+	push	BDATASEG
+	pop	es
 
-	mov	bx, 0xb800
-	mov	ds, bx
+	push	0xb800
+	pop	ds
 
     mov	bx, [es:vid_cols-bios_data]
 	shl	bx, 1
@@ -947,14 +936,12 @@ plot_char_gfx:
 	; si -> glyph's 8 row-bytes (CS-relative, MSB-first bit order)
 	xor	ah, ah
 	mov	si, ax
-	shl	si, 1
-	shl	si, 1
-	shl	si, 1
+	shl	si, 3
 	add	si, font8x8_table
 
 	; is this mode 6 (1bpp)?
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 	mov	al, [vidmode-bios_data]
 	mov	byte [cs:gfx_is_mode6], 0
 	cmp	al, 6
@@ -962,16 +949,15 @@ plot_char_gfx:
 	mov	byte [cs:gfx_is_mode6], 1
 .not_m6:
 
-	mov	ax, 0xb800
-	mov	es, ax
+	push	0xb800
+	pop	es
 
 	mov	byte [cs:gfx_scanline], 0
 .scanline_loop:
 	; py = row*8 + scanline
 	mov	al, [cs:gfx_row]
 	mov	ah, 0
-	mov	bx, 8
-	mul	bx
+	shl	ax, 3
 	mov	bl, [cs:gfx_scanline]
 	mov	bh, 0
 	add	ax, bx			; ax = py (0-199)
@@ -979,14 +965,12 @@ plot_char_gfx:
 	; bank_offset = (py & 1) ? 0x2000 : 0 ; row_offset = (py/2)*80
 	mov	dx, ax
 	and	dx, 1
-	mov	cl, 13
-	shl	dx, cl
+	shl	dx, 13
 
     push dx
 
 	shr	ax, 1
-	mov	bx, 80
-	mul	bx
+	imul	ax, ax, 80
 
     pop dx
 	add	ax, dx
@@ -1099,8 +1083,8 @@ plot_char_gfx:
 	mov	cl, al
 	mov	ch, 7
 
-	mov	bx, BDATASEG
-	mov	es, bx
+	push	BDATASEG
+	pop	es
 
 	cmp	byte [es:vidmode-bios_data], 4
 	jb	.text_mode_write
@@ -1120,8 +1104,8 @@ plot_char_gfx:
 	jmp	int10_write_char_skip_lines
 
 .text_mode_write:
-	mov	bx, 0xb800
-	mov	ds, bx
+	push	0xb800
+	pop	ds
 
     mov	bx, [es:vid_cols-bios_data]
 	shl	bx, 1
@@ -1167,8 +1151,8 @@ int10_write_char_common:
 	mov	[cs:gfx_rep_char], al
 	mov	[cs:gfx_rep_attr], bl
 
-    mov	bx, BDATASEG
-	mov	es, bx
+    push	BDATASEG
+	pop	es
 
 	cmp	byte [es:vidmode-bios_data], 4
 	jb	.text_mode_write
@@ -1208,8 +1192,8 @@ int10_write_char_common:
 	jmp	.done
 
 .text_mode_write:
-	mov	bx, 0xb800
-	mov	ds, bx
+	push	0xb800
+	pop	ds
 	mov	bx, [es:vid_cols-bios_data]
 	shl	bx, 1
 	mov	ax, 0
@@ -1371,8 +1355,8 @@ int10_write_char_attrib_done:
 
 	push	es
 
-	mov	ax, BDATASEG
-	mov	es, ax
+	push	BDATASEG
+	pop	es
 
     mov ah, [es:vid_cols-bios_data]
 	mov	al, [es:vidmode-bios_data]
@@ -1409,8 +1393,8 @@ int10_beep:
     out 0x61, al
 
     ; Busy-wait ~3 ticks (~156 ms) on the BDA tick counter at 0040:006C
-    mov cx, BDATASEG
-    mov es, cx
+    push BDATASEG
+    pop es
     mov ax, [es:0x6C]
     mov dx, [es:0x6E]
     add ax, 3
@@ -1443,8 +1427,8 @@ int10_set_bg_palette:
 	push	bx
 	push	dx
 
-	mov	ax, BDATASEG
-	mov	ds, ax
+	push	BDATASEG
+	pop	ds
 
 	mov	dx, 0x3D9		; CGA Color Select Register port
 
@@ -1484,34 +1468,6 @@ int10_set_bg_palette:
 	pop	ds
 	iret
 
-; int10_palette:
-; 	cmp al, 0x03       ; Sub-function 03h: Toggle Blink/Intensity
-; 	jne int10_palette_done
-
-; 	push dx
-; 	push ax
-
-; 	mov dx, 0x3D8      ; CGA Mode Control Register
-
-; 	cmp bl, 0          ; BL=0 means Blink OFF (High Intensity ON)
-; 	je .blink_off
-
-; .blink_on:
-; 	mov al, 0x29       ; Bit 5 = 1
-; 	out dx, al
-; 	jmp .finish
-
-; .blink_off:
-; 	mov al, 0x09       ; Bit 5 = 0
-; 	out dx, al
-
-; .finish:
-; 	pop ax
-; 	pop dx
-
-; int10_palette_done:
-; 	iret
-
 int10_features:
 
 	; Signify we have an active Color Graphics Adapter (CGA)
@@ -1534,8 +1490,8 @@ clear_screen:
 	push	es
 	push	di
 
-	mov	ax, BDATASEG
-	mov	es, ax
+	push	BDATASEG
+	pop	es
 	mov	byte [es:curpos_x-bios_data], 0
 	mov	byte [es:crt_curpos_x-bios_data], 0
 	mov	byte [es:curpos_y-bios_data], 0
@@ -1557,8 +1513,8 @@ clear_screen:
 .do_clear:
     push bx
 	cld
-	mov	bx, 0xb800
-	mov	es, bx
+	push	0xb800
+	pop	es
 	mov	di, 0
 	mov	cx, 8192 ; stosw write words, so 8192*2
 	rep	stosw
