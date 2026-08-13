@@ -349,27 +349,45 @@ static void __time_critical_func(render_text_scanline)(uint32_t y) {
 }
 
 static void __time_critical_func(render_cga_graphics_scanline)(uint32_t y) {
-    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
-
-    uint8_t palette_num =
-        crtc.mcr_color_burst_disabled ? 2 : ((crtc.color_select_register & 0x20) ? 1 : 0);
-    uint8_t intensity = (crtc.color_select_register & 0x10) ? 1 : 0;
-    uint8_t base_pal = (intensity * 12) + (palette_num * 4);
-
-    uint16_t m6_fg_color = textmode_palette[crtc.color_select_register & 0x0F];
-    uint16_t m6_bg_color = textmode_palette[0];
-
     uint8_t hd = crtc.dr_horiz_displayed;
     if (hd == 0) {
         hd = 40;
     }
 
     uint32_t bytes_per_row = hd * 2;
-    bool needs_downscale =
-        crtc.mcr_hires_graphics_mode && ((bytes_per_row * 8) > video_config->screen_width);
-
     uint32_t bank_offset = (ra & 1) ? 0x2000 : 0x0000;
     uint32_t base_vram_offset = ma_row_start * 2;
+
+    if (crtc.mcr_hires_graphics_mode) {
+        uint16_t fg_color = textmode_palette[crtc.color_select_register & 0x0F];
+        uint16_t bg_color = textmode_palette[0];
+
+        uint32_t source_pixels = bytes_per_row * 8;
+        uint32_t screen_width = video_config->screen_width;
+
+        for (uint32_t out_x = 0; out_x < screen_width; out_x++) {
+            uint32_t src_bit = (out_x * source_pixels) / screen_width;
+            if (src_bit >= source_pixels) {
+                src_bit = source_pixels - 1;
+            }
+
+            uint32_t src_byte = src_bit / 8;
+            uint8_t bit_in_byte = 7 - (src_bit % 8);
+
+            uint32_t vram_offset = base_vram_offset + bank_offset + src_byte;
+            uint8_t pixel_data = vram[vram_offset & 0x3FFF];
+            uint8_t pixel_bit = (pixel_data >> bit_in_byte) & 1;
+
+            video_config->display_put_pixel_callback(pixel_bit ? fg_color : bg_color);
+        }
+        return;
+    }
+
+    uint16_t bg_color = textmode_palette[crtc.color_select_register & 0x0F];
+    uint8_t palette_num =
+        crtc.mcr_color_burst_disabled ? 2 : ((crtc.color_select_register & 0x20) ? 1 : 0);
+    uint8_t intensity = (crtc.color_select_register & 0x10) ? 1 : 0;
+    uint8_t base_pal = (intensity * 12) + (palette_num * 4);
 
     uint32_t physical_pixels = 0;
 
@@ -377,52 +395,26 @@ static void __time_critical_func(render_cga_graphics_scanline)(uint32_t y) {
         uint32_t vram_offset = base_vram_offset + bank_offset + x_byte;
         uint8_t pixel_data = vram[vram_offset & 0x3FFF];
 
-        if (crtc.mcr_hires_graphics_mode) {
-            if (needs_downscale) {
-                for (int32_t bit = 7; bit >= 1; bit -= 2) {
-                    uint8_t p1 = (pixel_data >> bit) & 1;
-                    uint8_t p2 = (pixel_data >> (bit - 1)) & 1;
-                    uint16_t color = (p1 | p2) ? m6_fg_color : m6_bg_color;
+        uint8_t p0_val = (pixel_data >> 6) & 0x03;
+        uint8_t p1_val = (pixel_data >> 4) & 0x03;
+        uint8_t p2_val = (pixel_data >> 2) & 0x03;
+        uint8_t p3_val = (pixel_data >> 0) & 0x03;
 
-                    if (physical_pixels < video_config->screen_width) {
-                        video_config->display_put_pixel_callback(color);
-                        physical_pixels++;
-                    }
-                }
-            } else {
-                for (int32_t bit = 7; bit >= 0; bit--) {
-                    uint8_t pixel_bit = (pixel_data >> bit) & 1;
-                    uint16_t color = pixel_bit ? m6_fg_color : m6_bg_color;
-
-                    if (physical_pixels < video_config->screen_width) {
-                        video_config->display_put_pixel_callback(color);
-                        physical_pixels++;
-                    }
-                }
-            }
-        } else {
-            uint8_t p0_val = (pixel_data >> 6) & 0x03;
-            uint8_t p1_val = (pixel_data >> 4) & 0x03;
-            uint8_t p2_val = (pixel_data >> 2) & 0x03;
-            uint8_t p3_val = (pixel_data >> 0) & 0x03;
-
-            if ((physical_pixels + 4) <= video_config->screen_width) {
-                video_config->display_put_pixel_callback(p0_val ? cga_palette[base_pal + p0_val]
-                                                                : bg_color);
-                video_config->display_put_pixel_callback(p1_val ? cga_palette[base_pal + p1_val]
-                                                                : bg_color);
-                video_config->display_put_pixel_callback(p2_val ? cga_palette[base_pal + p2_val]
-                                                                : bg_color);
-                video_config->display_put_pixel_callback(p3_val ? cga_palette[base_pal + p3_val]
-                                                                : bg_color);
-                physical_pixels += 4;
-            }
+        if ((physical_pixels + 4) <= video_config->screen_width) {
+            video_config->display_put_pixel_callback(p0_val ? cga_palette[base_pal + p0_val]
+                                                            : bg_color);
+            video_config->display_put_pixel_callback(p1_val ? cga_palette[base_pal + p1_val]
+                                                            : bg_color);
+            video_config->display_put_pixel_callback(p2_val ? cga_palette[base_pal + p2_val]
+                                                            : bg_color);
+            video_config->display_put_pixel_callback(p3_val ? cga_palette[base_pal + p3_val]
+                                                            : bg_color);
+            physical_pixels += 4;
         }
     }
 
-    uint16_t pad_color = crtc.mcr_hires_graphics_mode ? m6_bg_color : bg_color;
     for (int32_t padding = physical_pixels; padding < video_config->screen_width; padding++) {
-        video_config->display_put_pixel_callback(pad_color);
+        video_config->display_put_pixel_callback(bg_color);
     }
 }
 
