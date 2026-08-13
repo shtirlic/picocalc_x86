@@ -2,7 +2,7 @@
 
 ![image](splash.svg)
 
-This software is an 8086 and 80186 emulator for the **ClockWorkPi PicoCalc** (https://www.clockworkpi.com/picocalc). It uses the Raspberry Pi Pico 2 board. The architecture uses data from the 8086tiny project by Adrian Cable.
+This is an 8086/80186 emulator for the **ClockWorkPi PicoCalc** (https://www.clockworkpi.com/picocalc) on Raspberry Pi Pico 2 board.
 
 The project based on great 8086tiny project (https://github.com/adriancable/8086tiny) by Adrian Cable.
 
@@ -18,17 +18,17 @@ If someone wants to run on ARM cores it would be very easy to adapt it.
 ## Specs
 
 ### CPU
-   * 8086 CPU emulation
-   * Some 80186 instructions supported
+   * 8086/8088 CPU emulation
+   * 80186/80188 CPU emulation
 
 ### RAM
 In stock Pico 2 config without soldered PSRAM:
    * The available conventional **RAM is 442368(0x6C000) bytes, or 432 KB**
    * 16 KB of video RAM is available for the CGA adapter
-   * 16 KB of RAM is reserved for the BIOS and internal processes.
+   * 16 KB of RAM is reserved for the BIOS and internal data
 
 ### Performance
-It's around ~1 MIPS, so it's like overpowered IBM PC XT or PS/2 model 30.
+It's around ~1 MIPS, so it's like overpowered IBM PC XT or PS/2 model 30/25.
 
 ### Video and Display
 CGA video adapter
@@ -54,14 +54,23 @@ CGA video adapter
 ### Keyboard
    * Keyboard works with hotkeys available like ALT+F1, CTRL+G etc.
    * To get SHIFT+F6-F10 press left SHIFT and right SHIFT together.
-   * Short press on PicoCalc Power button doing warm reboot if latest `south bridge` firmware flashed.
+   * Short press on PicoCalc Power button doing reset/screenshot if latest `south bridge` firmware flashed and configured in BIOS Setup utility.
 
+### BIOS
+   * Setup utility (press F1 during/after the beep)
+    * Date/Time
+    * Boot order
+    * Power button => Reset/Screenshot (default Reset)
+    * Saving/restoring CMOS not ready yet
+
+### Extra
+   * Screenshots are saved as BMP (320x320px) files in `/x86/screenshots` dir on SDCARD
 
 ## Getting Started
 
 Firmware images are available only for Raspberry Pi Pico 2.
 
-* Find prebuilt disk images with MS DOS 4.0 or SvarDOS and PicoCalc x86 firmware images in Releases (https://github.com/shtirlic/picocalc_x86/releases)
+* Find prebuilt disk images with MS DOS 4.0, SvarDOS or FreeDOS and PicoCalc x86 firmware images in Releases (https://github.com/shtirlic/picocalc_x86/releases)
 
 * Load uf2 firmware image via `picotool` or USB mass storage method.
 * Format SD card with FAT32 file system, create `x86` dir in the root and put desired `hd.img` into it, so the resulting path on the SD Card is `/x86/hd.img`
@@ -127,7 +136,7 @@ Example:
 ./tcpser -d /dev/ttyUSB0 -s 57600 -l 4 -i "s0=1&k4e1" -n123=bbs.alsgeeklab.com:2323
 ```
 
-This starts host modem emulation on `ttyUSB0` (PicoCalc Pico uart port connected via USB-C)
+This starts host modem emulation on `ttyUSB0` (PicoCalc Pico UART port connected via USB-C)
 
 Explanation of modem init command `"s0=1&k4e1"`:
 >It will pick up the phone after one ring, enable XON/XOFF software flow control and enable
@@ -144,7 +153,7 @@ For the terminal I suggest using shareware Qmodem Lite 4.5 https://winworldpc.co
  * Git
  * nasm (https://github.com/netwide-assembler/nasm/)
  * Cmake
- * pico-sdk 2.3.0 (https://github.com/raspberrypi/pico-sdk) (/usr/share/pico-sdk)
+ * pico-sdk **2.3.0** (https://github.com/raspberrypi/pico-sdk) (/usr/share/pico-sdk)
  * riscv-none-elf gcc (https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack)
 
 ### Optional Software
@@ -160,23 +169,22 @@ git clone --recurse-submodules https://github.com/shtirlic/picocalc_x86
 
 ## Todo
 
- * [ ] Fix CGA text output in graphics mode for mode 4 and mode 6
+ * [x] Fix CGA text output in graphics mode for mode 4 and mode 6
  * [x] Add good 8x8 font for 40 column text mode
- * [ ] Make screenshot function (hotkey) via saving on SD Card
+ * [x] Make screenshot function (hotkey) via saving on SD Card
  * [ ] Support boards with soldered PSRAM connected via QMI like Pimoroni Pico 2 Plus (map memory up to 736kb)
  * [ ] EMS 3.2 full testing and XMS on top of it
  * [x] UART passthrough to host PC as COM1 (modem etc.)
  * [ ] Pico 2 W some network emulation
  * [ ] CDC ACM NCM support
- * [ ] Pico 2 LED support
  * [x] Support ctrl+f1 or alt+f1 and other keystrokes
  * [ ] MCGA? mode 13h 320x200 256-color mode via PSRAM
  * [ ] More hardware devices emulation
  * [x] Add floppy support via fd.img
- * [ ] BIOS boot menu
+ * [x] BIOS Setup utility
  * [ ] Better emulation for disk subsystems
- * [ ] Enable bios override from SD card
+ * [ ] Enable BIOS override from SD card
  * [ ] Support backlights and power resets via https://git.jcsmith.fr/jackcartersmith/picocalc_BIOS
- * [ ] Power management / battery reporting
+ * [ ] Power management / battery reporting (`power.exe`)
  * [ ] Pass all test for CGA comp https://github.com/MobyGamer/CGACompatibilityTester
  * [ ] Battery / performance and status overlay at the top of the screen, shortcut helpers at the bottom
