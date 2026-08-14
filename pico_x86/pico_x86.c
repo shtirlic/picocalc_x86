@@ -61,8 +61,6 @@ static uint32_t __scratch_y("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint;
 int32_t __scratch_y("cpu") op_result, scratch_int;
 
-struct timespec __scratch_y() ts;
-struct tm __scratch_y() clock_tm;
 static bool __scratch_y() isr_ready;
 
 static queue_t __scratch_y() local_kbd_queue;
@@ -940,36 +938,8 @@ OP_48: // Emulator-specific 0F xx opcodes
         pico_x86_serial_ctl();
         break;
     }
-    case 1: {
-        aon_timer_get_time(&ts);
-        uint32_t dest = SEGREG(REG_ES, REG_BX, );
-
-        if (likely(aon_timer_get_time_calendar(&clock_tm))) {
-            CAST(uint32_t)
-            mem[dest + 0] = clock_tm.tm_sec;
-            CAST(uint32_t)
-            mem[dest + 4] = clock_tm.tm_min;
-            CAST(uint32_t)
-            mem[dest + 8] = clock_tm.tm_hour;
-            CAST(uint32_t)
-            mem[dest + 12] = clock_tm.tm_mday;
-            CAST(uint32_t)
-            mem[dest + 16] = clock_tm.tm_mon;
-            CAST(uint32_t)
-            mem[dest + 20] = clock_tm.tm_year;
-            CAST(uint32_t)
-            mem[dest + 24] = clock_tm.tm_wday;
-            CAST(uint32_t)
-            mem[dest + 28] = clock_tm.tm_yday;
-            CAST(uint32_t)
-            mem[dest + 32] = clock_tm.tm_isdst;
-        } else {
-            memset(&mem[dest], 0, 36);
-        }
-        // The BIOS expects the milliseconds as a 16-bit integer at offset
-        // 36
-        CAST(int16_t)
-        mem[dest + 36] = ts.tv_nsec / 1000000;
+    case 1: { // INT9 keyboard scancode decode
+        pico_x86_keyb_process_scancode(CPU.AL);
         break;
     }
     case 2: { // DISK READ
@@ -1027,19 +997,36 @@ OP_48: // Emulator-specific 0F xx opcodes
         CPU.AX = bw;
         break;
     }
-    case 4: { // INT9 keyboard scancode decode
-        pico_x86_keyb_process_scancode(CPU.AL);
+    case 4: { // extended_get_rtc
+        static struct timespec ts;
+        aon_timer_get_time(&ts);
+        uint32_t dest = SEGREG(REG_ES, REG_BX, );
+        static struct tm new_tm = {0};
+
+        if (likely(aon_timer_get_time_calendar(&new_tm))) {
+            memcpy(&mem[dest], &new_tm, 36);
+        } else {
+            memset(&mem[dest], 0, 36);
+        }
+        // The BIOS expects the milliseconds as a 16-bit integer at offset
+        // 36
+        CAST(int16_t)
+        mem[dest + 36] = ts.tv_nsec / 1000000;
         break;
     }
-    case 5: {
-        uint32_t src = SEGREG(REG_ES, REG_BX, );
+
+    case 5: { // extended_set_rtc
         static struct tm new_tm = {0};
+        uint32_t src = SEGREG(REG_ES, REG_BX, );
         new_tm.tm_sec = (int32_t)CAST(uint32_t) mem[src + 0];
         new_tm.tm_min = (int32_t)CAST(uint32_t) mem[src + 4];
         new_tm.tm_hour = (int32_t)CAST(uint32_t) mem[src + 8];
         new_tm.tm_mday = (int32_t)CAST(uint32_t) mem[src + 12];
         new_tm.tm_mon = (int32_t)CAST(uint32_t) mem[src + 16];
         new_tm.tm_year = (int32_t)CAST(uint32_t) mem[src + 20];
+        new_tm.tm_wday = (int32_t)CAST(uint32_t) mem[src + 24];
+        new_tm.tm_yday = (int32_t)CAST(uint32_t) mem[src + 28];
+        new_tm.tm_isdst = (int32_t)CAST(uint32_t) mem[src + 32];
 
         bool ok = aon_timer_is_running() ? aon_timer_set_time_calendar(&new_tm)
                                          : aon_timer_start_calendar(&new_tm);
@@ -1050,16 +1037,12 @@ OP_48: // Emulator-specific 0F xx opcodes
         }
         break;
     }
-    case 6: {
-        uint32_t ticks = ((uint32_t)CPU.CX << 16) | CPU.DX;
-        uint32_t hour = ticks / 65520;
-        uint32_t rem = ticks % 65520;
-        uint32_t min = rem / 1092;
-        rem %= 1092;
-        uint32_t sec = (rem * 10) / 182;
-
-        if (unlikely(hour > 23))
-            hour = 23;
+    case 6: { // extended_set_systime
+        uint32_t ticks = (((uint32_t)CPU.CX << 16) | CPU.DX) % 1573040;
+        uint32_t total_sec = (uint32_t)(((uint64_t)ticks * 86400) / 1573040);
+        uint32_t hour = total_sec / 3600;
+        uint32_t min = (total_sec / 60) % 60;
+        uint32_t sec = total_sec % 60;
 
         static struct tm new_tm = {0};
         if (likely(aon_timer_get_time_calendar(&new_tm))) {
@@ -1079,7 +1062,6 @@ OP_48: // Emulator-specific 0F xx opcodes
         }
         break;
     }
-
     case 7: { // BIOS setup menu (F1 during POST)
         CPU.AL = pico_x86_bios_setup_menu();
         break;

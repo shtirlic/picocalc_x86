@@ -17,7 +17,7 @@
 	db	0x0f, 0x00
 %endmacro
 
-%macro	extended_get_rtc 0
+%macro	extended_process_key 0
 	db	0x0f, 0x01
 %endmacro
 
@@ -29,7 +29,7 @@
 	db	0x0f, 0x03
 %endmacro
 
-%macro	extended_process_key 0
+%macro	extended_get_rtc 0
 	db	0x0f, 0x04
 %endmacro
 
@@ -338,13 +338,36 @@ next_out:
 	out 0x40, al
 	out 0x40, al
 
-    ; Get initial RTC value
 	push	cs
 	pop	es
 	mov	bx, timetable
 	extended_get_rtc
-	mov	ax, [es:tm_msec]
-	mov	[cs:last_int8_msec], ax
+
+	mov	ax, 182
+	mul	word [tm_sec]
+	mov	bx, 10
+	xor	dx, dx
+	div	bx
+	mov	si, ax
+
+	mov	ax, 1092
+	mul	word [tm_min]
+	add	si, ax
+
+	mov	ax, 65520
+	mul	word [tm_hour]
+	add	ax, si
+	adc	dx, 0
+
+	push	ax
+	push	dx
+	mov	bx, BDATASEG
+	mov	ds, bx
+	pop	word [ds:0x6E]
+	pop	word [ds:0x6C]
+	mov	byte [ds:0x70], 0
+	push	cs
+	pop	ds
 
     ; Print BIOS strings
 	mov	si, biosstr
@@ -455,7 +478,7 @@ wait_f1_loop:
 
     extended_bios_setup
     mov	[cs:boot_device], al
-    jmp	no_setup_key
+    jmp	bios_entry
 
   .check_time:
     mov	ax, [es:0x6C]
@@ -854,11 +877,9 @@ int13:
 wr_fine:
 
 	mov	ah, 0
-	cpu	186
 	shl	ax, 9
 	extended_write_disk
 	shr	ax, 9
-	cpu	8086
 	mov	ah, 0x03	; Put write code back
 
 	cmp	al, 0
@@ -1254,123 +1275,43 @@ int1a:
 
 int1a_getsystime:
 
-	push	ax
-	push	bx
 	push	ds
-	push	es
 
-	push	cs
-	push	cs
-	pop	ds
-	pop	es
-
-	mov	bx, timetable
-
-	extended_get_rtc
-
-	mov	ax, 182
-	mul	word [tm_msec]
-	mov	bx, 10000
-	div	bx
-	mov	[tm_msec], ax
-
-	mov	ax, 182
-	mul	word [tm_sec]
-	mov	bx, 10
-	mov	dx, 0
-	div	bx
-	mov	[tm_sec], ax
-
-	mov	ax, 1092
-	mul	word [tm_min]
-	mov	[tm_min], ax
-
-	mov	ax, 65520
-	mul	word [tm_hour]
-
-	add	ax, [tm_msec]
-	adc	dx, 0
-	add	ax, [tm_sec]
-	adc	dx, 0
-	add	ax, [tm_min]
-	adc	dx, 0
-
-	push	dx
-	push	ax
-	pop	dx
-	pop	cx
-
-	pop	es
-	pop	ds
-	pop	bx
-	pop	ax
-
-	push	ds
-	push	bx
-
-	mov	bx, BDATASEG
-	mov	ds, bx
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	dx, [ds:0x6C]
+	mov	cx, [ds:0x6E]
 	mov	al, [ds:0x70]
 	mov	byte [ds:0x70], 0
 
-	pop	bx
 	pop	ds
 
 	iret
 
-resync_tick_baseline:
-
-	; After we jump the RTC to a new value (set time/date/systime), the
-	; inta handler's msec-delta baseline (last_int8_msec) is left stale,
-	; pointing at wherever the clock *used* to be. Left alone, the very
-	; next inta tick computes a bogus (possibly huge, possibly negative)
-	; delta from that discontinuity and mis-advances the BIOS Data Area
-	; tick counter at 0040:006C that DOS's own clock is built on - which
-	; is why a time you just set could appear to silently "not take" when
-	; you check it again. Re-reading the RTC and resetting the baseline
-	; here makes the next tick see a normal, small delta again.
-	;
-	; Assumes DS=ES=CS, which is true at every call site below.
-
-	push	ax
-	push	bx
-
-	mov	bx, timetable
-	extended_get_rtc
-	mov	ax, [tm_msec]
-	mov	[cs:last_int8_msec], ax
-
-	pop	bx
-	pop	ax
-	ret
-
   int1a_setsystime:
 
 	; Set ticks-since-midnight (INT 1Ah AH=01h). Input: CX:DX = tick count
-	; since midnight (CX = high word, DX = low word). This is the call
-	; DOS's kernel actually issues when TIME is used interactively - DOS
-	; tracks time-of-day internally as a tick count, not as RTC BCD time,
-	; so this (not AH=03h) is what needs to move the needle for TIME to
-	; visibly take effect. We hand the raw ticks to the emulator, which
-	; converts to h:m:s, merges with the existing date, and commits it.
+	; since midnight (CX = high word, DX = low word).
 
 	push	ax
-	push	bx
 	push	ds
 	push	es
 
-	push	cs
+	mov	ax, BDATASEG
+	mov	ds, ax
+	mov	[ds:0x6C], dx
+	mov	[ds:0x6E], cx
+	mov	byte [ds:0x70], 0
+
 	push	cs
 	pop	ds
+	push	cs
 	pop	es
 
 	extended_set_systime	; Input: CX:DX (untouched above)
 
-	call	resync_tick_baseline
-
 	pop	es
 	pop	ds
-	pop	bx
 	pop	ax
 
 	jmp	reach_stack_clc
@@ -1465,7 +1406,6 @@ resync_tick_baseline:
 
 	extended_set_rtc	; AL = 0 on success, 0xFF on failure
 
-	call	resync_tick_baseline
 
 	cmp	al, 0
 
@@ -1544,6 +1484,7 @@ resync_tick_baseline:
 
 	mov	bx, timetable
 	extended_get_rtc
+    push bx
 
 	mov	al, cl		; Year within century, BCD
 	call	bcd_to_hex
@@ -1556,7 +1497,7 @@ resync_tick_baseline:
 	mov	ch, 100
 	mul	ch		; AX = century * 100
 
-	mov	bh, 0
+    mov	bh, 0
 	add	ax, bx		; AX = full 4-digit year
 
 	sub	ax, 1900	; tm_year is years since 1900
@@ -1576,9 +1517,8 @@ resync_tick_baseline:
 	mov	[tm_mday], ax
 	mov	word [tm_mday+2], 0
 
+    pop bx
 	extended_set_rtc	; AL = 0 on success, 0xFF on failure
-
-	call	resync_tick_baseline
 
 	cmp	al, 0
 
@@ -2176,10 +2116,6 @@ kbokstr    db   ' KB OK', 0
 bootfailstr db  'Disk boot failure', 0
 setup_hintstr db 'Press F1 to enter SETUP', 0
 
-
-; INT 8 millisecond counter
-
-last_int8_msec	dw	0
 
 int1a_midnight_flag	db	0
 

@@ -181,7 +181,6 @@ static void init_fs() {
 static void init_system() {
     set_sys_clock_hz(PICO_SYS_CLOCK_MHZ * MHZ, true);
     bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_DMA_W_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS;
-    aon_timer_start_with_timeofday();
 
 #ifdef DEBUG_CONSOLE
     stdio_init_all();
