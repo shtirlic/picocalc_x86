@@ -49,7 +49,9 @@ static opcode_decode_t __scratch_y("cpu") CPU_OPCODE = {0};
 
 static uint8_t __scratch_y("cpu") * opcode_stream, raw_opcode_id,
     seg_override_en, i_rm, i_w, i_reg, i_mod, i_mod_size, i_d, i_reg4bit, rep_mode,
-    rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en, shift_count, int8_asap;
+    rep_override_en, trap_flag, scratch_uchar, io_hi_lo, spkr_en, shift_count;
+
+volatile uint8_t __scratch_y("cpu") int8_pending;
 
 uint8_t *__scratch_y("cpu") regs8 = nullptr;
 static uint8_t power_action = POWER_ACTION_REBOOT;
@@ -61,10 +63,17 @@ static uint32_t __scratch_y("cpu") op_source, op_dest, rm_addr, op_to_addr,
     op_from_addr, i_data0, i_data1, i_data2, scratch_uint, scratch2_uint;
 int32_t __scratch_y("cpu") op_result, scratch_int;
 
-static bool __scratch_y() isr_ready;
-
 static queue_t __scratch_y() local_kbd_queue;
 queue_t __scratch_y() *kbd_queue = nullptr;
+
+extern FATFS fs;
+extern const uint8_t binary_bios_bin_start[];
+extern const uint8_t binary_bios_bin_end[];
+
+static FIL fpd, fpfd;
+static FRESULT fr;
+
+static uint8_t floppy_present = 0;
 
 // Helper macros
 
@@ -169,7 +178,7 @@ static int8_t __always_inline set_OF(int32_t new_OF) { return CPU.OF = !!new_OF;
 // Set auxiliary and overflow flag after arithmetic operations
 static int8_t __always_inline set_AF_OF_arith() {
     set_AF((op_source ^= op_dest ^ op_result) & 0x10);
-    if (op_result == op_dest) {
+    if (unlikely(op_result == op_dest)) {
         return set_OF(0);
     }
     return set_OF(1 & (CPU.CF ^ op_source >> (TOP_BIT - 1)));
@@ -225,46 +234,47 @@ static int32_t __always_inline AAA_AAS(int8_t w_op) {
 }
 
 // Read a byte from an I/O port
-static uint8_t __always_inline io_port_in(uint32_t port) {
+static void __always_inline io_port_in(uint32_t port) {
+    if (port >= 0x40 && port <= 0x42) {
+        io_ports[port] = pico_x86_pit_in(port);
+    }
+    if (port >= 0x03D0 && port <= 0x03DF) {
+        video_cga_port_in(port);
+    }
+    if (port == 0x61) { // ppi
+        io_ports[0x61] = pico_x86_pit_get_port61_state(io_ports[0x61]);
+    }
+    if (port >= 0x3F8 && port <= 0x3FF) {
+        pico_x86_serial_port_in(port);
+    }
     if (port == 0x20) {
         io_ports[0x20] = 0;
-    } else if (port >= 0x40 && port <= 0x42) {
-        io_ports[port] = pico_x86_pit_in(port);
-    } else if (port >= 0x03D0 && port <= 0x03DF) {
-        video_cga_port_in(port);
-    } else if (port == 0x61) { // ppi
-        io_ports[0x61] = pico_x86_pit_get_port61_state(io_ports[0x61]);
-    } else if (port >= 0x3F8 && port <= 0x3FF) {
-        pico_x86_serial_port_in(port);
-    } else if (port == 0x321) { // xt hdd
+    }
+    if (port == 0x321) { // xt hdd
         io_ports[0x321] = 0;
     }
-    return io_ports[port];
 }
 
 // Write a byte to an I/O port
 static void __always_inline io_port_out(uint32_t port, uint8_t val) {
+    if (port >= 0x40 && port <= 0x43) {
+        pico_x86_pit_out(port, val);
+    }
+    if (port >= 0x03D0 && port <= 0x03DF) {
+        video_cga_port_out(port);
+    }
     if (port == 0x61) { // ppi
         io_hi_lo = 0;
         spkr_en |= (val & 3);
         pico_x86_pit_set_speaker_control(val);
     }
-
-    if (port >= 0x40 && port <= 0x43) {
-        pico_x86_pit_out(port, val);
-    }
-
-    if (port >= 0x03D0 && port <= 0x03DF) {
-        video_cga_port_out(port);
-    }
-
     if (port >= 0x3F8 && port <= 0x3FF) {
         pico_x86_serial_port_out(port);
     }
 }
 
 // PicoCalc specific keyboard handling
-static void keyboard_process() {
+static void __time_critical_func(keyboard_int_process)() {
     static int32_t kbd_event = 0;
     if (unlikely(queue_try_remove(kbd_queue, &kbd_event))) {
         uint8_t scancode = kbd_event & 0xFF;
@@ -289,38 +299,21 @@ static void keyboard_process() {
     }
 }
 
-extern FATFS fs;
-extern const uint8_t binary_bios_bin_start[];
-extern const uint8_t binary_bios_bin_end[];
-
-static FIL fpd, fpfd;
-static FRESULT fr;
-
-static uint8_t floppy_present = 0;
+static void __always_inline __isr isr() {
+    if (unlikely(int8_pending)) {
+        pc_interrupt(0xA);
+        int8_pending--;
+        keyboard_int_process();
+    } else if (unlikely(pico_x86_serial_int_pending())) {
+        pc_interrupt(0x0C); // Trigger IRQ 4
+    }
+}
 
 uint8_t pico_x86_get_floppy_enabled() { return floppy_present; }
 void pico_x86_set_floppy_enabled(uint8_t enabled) { floppy_present = enabled; }
 
 uint8_t pico_x86_get_power_action() { return power_action; }
 void pico_x86_set_power_action(uint8_t action) { power_action = action; }
-
-void __always_inline pico_x86_timer_tick() {
-    if (int8_asap < 0xFF) {
-        int8_asap++;
-    }
-}
-
-static void __always_inline __isr isr() {
-    if ((int8_asap)) {
-        pc_interrupt(0xA);
-        int8_asap--;
-        if (int8_asap == 0) {
-            keyboard_process();
-        }
-    } else if (unlikely(pico_x86_serial_int_pending())) {
-        pc_interrupt(0x0C); // Trigger IRQ 4
-    }
-}
 
 void pico_x86_run() {
     printf("\n▼ Memory Size %d: bytes\n", RAM_SIZE);
@@ -481,7 +474,7 @@ start:
 
     // CPU_OPCODE.mod_size > 0 indicates that opcode uses i_mod/i_rm/i_reg, so decode
     // them
-    if (CPU_OPCODE.mod_size > 0) {
+    if (likely(CPU_OPCODE.mod_size > 0)) {
         i_mod = EXTRACT_BITS(i_data0, 7, 6);
         i_reg = EXTRACT_BITS(i_data0, 5, 3);
         i_rm = i_data0 & 0x7;
@@ -636,11 +629,11 @@ OP_10: // MOV sreg, r/m | POP r/m | LEA reg, r/m
         i_w = 1;
         i_reg += 8;
         DECODE_RM_REG;
-        if (i_d &&
-            (op_to_addr == REGS_BASE + (REG_CS << 1) || op_to_addr > REGS_BASE + (REG_DS << 1))) {
+        if (unlikely(i_d && (op_to_addr == REGS_BASE + (REG_CS << 1) ||
+                             op_to_addr > REGS_BASE + (REG_DS << 1)))) {
             goto OP_INVALID;
         }
-        if (!i_d && (op_from_addr > REGS_BASE + (REG_DS << 1))) {
+        if (unlikely(!i_d && (op_from_addr > REGS_BASE + (REG_DS << 1)))) {
             goto OP_INVALID;
         }
         OP(=);
@@ -765,7 +758,7 @@ OP_24: // NOP|XCHG reg, r/m
 OP_17: // MOVSx|STOSx|LODSx
     scratch2_uint = seg_override_en ? seg_override : REG_DS;
     scratch_uint = rep_override_en ? CPU.CX : 1;
-    if (trap_flag && scratch_uint > 1) {
+    if (unlikely(trap_flag) && scratch_uint > 1) {
         scratch_uint = 1;
     }
     for (; scratch_uint; scratch_uint--) {
@@ -1217,23 +1210,19 @@ OP_INVALID: // Invalid opcode exception
     NEXT_OP;
 next_opcode:
 
-    // Memory guard agains probing more than RAM_SIZE
-    *(uint32_t *)(mem + RAM_SIZE) = 0xFFFFFFFF;
-
     CPU.IP += (((i_mod * (i_mod != 3)) + ((!i_mod && i_rm == 6) << 1)) * CPU_OPCODE.mod_size) +
               inst_size_table[raw_opcode_id].base_size +
               (inst_size_table[raw_opcode_id].w_size * (i_w + 1));
 
     // If instruction needs to update SF, ZF and PF, set them as appropriate
-    if (CPU_OPCODE.flags & FLAGS_UPDATE_SZP) {
+    if (likely(CPU_OPCODE.flags & FLAGS_UPDATE_SZP)) {
         CPU.SF = SIGN_OF(op_result);
         CPU.ZF = !op_result;
-
         CPU.PF = !(hweight8(op_result) & 1);
 
         // If instruction is an arithmetic or logic operation, also set
         // AF/OF/CF as appropriate.
-        if (CPU_OPCODE.flags & FLAGS_UPDATE_AO_ARITH) {
+        if (likely(CPU_OPCODE.flags & FLAGS_UPDATE_AO_ARITH)) {
             set_AF_OF_arith();
         }
         if (CPU_OPCODE.flags & FLAGS_UPDATE_OC_LOGIC) {
@@ -1251,10 +1240,11 @@ next_opcode:
     // If a timer tick or serial is pending, interrupts are enabled, and no
     // overrides/REP are active, then process the tick and check for new
     // keystrokes in isr
-    isr_ready = ((!seg_override_en && !rep_override_en && CPU.IF && !trap_flag) != 0);
-    if ((isr_ready)) {
+    if ((!seg_override_en & !rep_override_en & CPU.IF & !CPU.TF) != 0) {
         isr();
     }
+    // Memory guard agains probing more than RAM_SIZE
+    *(uint32_t *)(mem + RAM_SIZE) = 0xFFFFFFFF;
 
     goto start;
 

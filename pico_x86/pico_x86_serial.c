@@ -9,6 +9,7 @@
 #include "pico_x86.h"
 #include "pico_x86_serial.h"
 #include <hardware/timer.h>
+#include <pico/platform/sections.h>
 #include <pico/time.h>
 
 extern uint8_t io_ports[];
@@ -37,7 +38,7 @@ static void com1_set_mcr(uint8_t val) {
         com1_rx_irq_pending = false; // OUT2 cleared: force re-arm on next enable
 }
 
-static void com1_apply_config(void) {
+static void __time_critical_func(com1_apply_config)(void) {
     uint16_t divisor = ((uint16_t)com1_dlm << 8) | com1_dll;
     uint32_t baud = 2400;
     if (likely(divisor != 0)) {
@@ -353,14 +354,13 @@ void pico_x86_serial_ctl(void) {
 }
 
 bool __time_critical_func(pico_x86_serial_int_pending)(void) {
+    if (likely(!uart_is_readable(SERIAL_UART_ID))) {
+        return com1_rx_irq_pending = false; // Reset if the buffer empty
+    }
     bool out2_set = (com1_mcr & 0x08) != 0; // OUT2 gates the IRQ line on real 16550s
-
     if (out2_set && (com1_ier & 0x01) && uart_is_readable(SERIAL_UART_ID) && !com1_rx_irq_pending) {
         com1_rx_irq_pending = true; // Prevent re-triggering until read
         return true;
-    } else if (!uart_is_readable(SERIAL_UART_ID)) {
-        com1_rx_irq_pending = false; // Reset if the buffer empty
-        return false;
     }
     return false;
 }

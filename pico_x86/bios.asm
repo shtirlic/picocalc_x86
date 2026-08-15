@@ -78,7 +78,7 @@ main:
 
 biosstr db	'PicoCalc x86 BIOS Rev.05 ', 0, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/13/26', 0, 0xfa, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/15/26', 0, 0xfa, 0
 
 bios_entry:
 
@@ -568,26 +568,20 @@ int9:
 ; ************************* INT Ah handler - timer (Hardware Paced)
 
 inta:
-
-	push	ax
-	push	dx
 	push	es
 
-	; Point ES to the BIOS Data Area (Segment 0040h)
-	mov	ax, BDATASEG
-	mov	es, ax
+	push	BDATASEG
+	pop	es
 
 	; Increment the 32-bit daily timer tick counter at 0040:006C by exactly 1
 	add	word [es:0x6C], 1
 	adc	word [es:0x6E], 0
 
 	; Standard PC BIOS midnight rollover
-	mov	ax, [es:0x6E]
-	mov	dx, [es:0x6C]
-	cmp	ax, 0x18
+	cmp	word [es:0x6E], 0x18
 	jb	.no_rollover
 	ja	.rollover
-	cmp	dx, 0xB0
+	cmp	word [es:0x6C], 0xB0
 	jb	.no_rollover
 
   .rollover:
@@ -601,10 +595,7 @@ inta:
 	int	8
 
 	pop	es
-	pop	dx
-	pop	ax
 	iret
-
 
 ; ************************* INT 8h handler - timer
 

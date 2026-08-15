@@ -459,7 +459,6 @@ static void draw_award_menu(page_id_t page, int cursor) { pages[page].draw(curso
 
 static uint8_t wait_key(void) {
     for (;;) {
-        sleep_ms(16);
         static int32_t kbd_event = 0;
         if (queue_try_remove(kbd_queue, &kbd_event)) {
             if (KBD_GET_STATE(kbd_event) == KBD_STATE_RELEASE) {

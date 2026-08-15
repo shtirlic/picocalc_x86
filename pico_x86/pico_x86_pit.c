@@ -13,34 +13,32 @@ static struct repeating_timer xt_timer;
 
 pit_channel_t pit_channels[3];
 
+extern uint8_t int8_pending;
+
 static volatile uint8_t speaker_data_enable;
 
-static uint16_t __always_inline bcd_to_bin(uint16_t bcd)
-{
-    return (bcd & 0xF) + (((bcd >> 4) & 0xF) * 10) + ((bcd >> 8) & 0xF) * 100
-        + ((bcd >> 12) & 0xF) * 1000;
+static uint16_t __always_inline bcd_to_bin(uint16_t bcd) {
+    return (bcd & 0xF) + (((bcd >> 4) & 0xF) * 10) + ((bcd >> 8) & 0xF) * 100 +
+           ((bcd >> 12) & 0xF) * 1000;
 }
 
-static uint16_t __always_inline bin_to_bcd(uint16_t bin)
-{
-    return (bin % 10) | (((bin / 10) % 10) << 4) | (((bin / 100) % 10) << 8)
-        | (((bin / 1000) % 10) << 12);
+static uint16_t __always_inline bin_to_bcd(uint16_t bin) {
+    return (bin % 10) | (((bin / 10) % 10) << 4) | (((bin / 100) % 10) << 8) |
+           (((bin / 1000) % 10) << 12);
 }
 
-static uint32_t __always_inline effective_max(const pit_channel_t* c)
-{
+static uint32_t __always_inline effective_max(const pit_channel_t *c) {
     uint32_t r = c->bcd ? bcd_to_bin(c->reload) : c->reload;
     if (r == 0)
         r = c->bcd ? 10000 : 65536;
     return r;
 }
 
-void pico_x86_pit_init(void)
-{
-    memset((void*)pit_channels, 0, sizeof(pit_channels));
+void pico_x86_pit_init(void) {
+    memset((void *)pit_channels, 0, sizeof(pit_channels));
     speaker_data_enable = 0;
     for (int i = 0; i < 3; i++) {
-        pit_channel_t* c = &pit_channels[i];
+        pit_channel_t *c = &pit_channels[i];
         c->rw_mode = 3;
         c->mode = 3;
         c->reload = 0;
@@ -52,24 +50,25 @@ void pico_x86_pit_init(void)
     }
 }
 
-static bool __time_critical_func(xt_timer_callback)(struct repeating_timer* t)
-{
+static bool __time_critical_func(xt_timer_callback)(struct repeating_timer *t) {
     uint32_t irq0_events = pico_x86_pit_advance(PIT_TICKS_PER_INTERVAL);
 
     // Drop excess ticks
     if (unlikely(irq0_events > 0)) {
-        pico_x86_timer_tick();
+        if (int8_pending < 0xFF) {
+            int8_pending++;
+        }
     }
     return true;
 }
 
-void pico_x86_pit_timer_init()
-{
-    add_repeating_timer_us(-PIT_TICK_INTERVAL_US, xt_timer_callback, NULL, &xt_timer);
+void pico_x86_pit_timer_init() {
+    alarm_pool_t *pool = alarm_pool_create_with_unused_hardware_alarm(1);
+    alarm_pool_add_repeating_timer_us(pool, -PIT_TICK_INTERVAL_US, xt_timer_callback, NULL,
+                                      &xt_timer);
 }
 
-static void __always_inline pit_load(pit_channel_t* c)
-{
+static void __always_inline pit_load(pit_channel_t *c) {
     uint32_t max = effective_max(c);
     c->pos = max - 1;
 
@@ -80,10 +79,9 @@ static void __always_inline pit_load(pit_channel_t* c)
     }
 }
 
-static void __always_inline pit_status_byte(const pit_channel_t* c) { (void)c; }
+static void __always_inline pit_status_byte(const pit_channel_t *c) { (void)c; }
 
-static void __time_critical_func(pit_readback)(uint8_t cmd)
-{
+static void __time_critical_func(pit_readback)(uint8_t cmd) {
     uint8_t latch_count = !(cmd & 0x20);
     uint8_t latch_status = !(cmd & 0x10);
 
@@ -92,11 +90,11 @@ static void __time_critical_func(pit_readback)(uint8_t cmd)
             continue;
         }
 
-        pit_channel_t* c = &pit_channels[ch];
+        pit_channel_t *c = &pit_channels[ch];
 
         if (latch_status) {
-            uint8_t status = (uint8_t)((c->output << 7) | (0 << 6) | (c->rw_mode << 4)
-                | (c->mode << 1) | c->bcd);
+            uint8_t status = (uint8_t)((c->output << 7) | (0 << 6) | (c->rw_mode << 4) |
+                                       (c->mode << 1) | c->bcd);
             c->latch = status;
             c->latched = 2;
         } else if (latch_count && c->latched != 1) {
@@ -108,8 +106,7 @@ static void __time_critical_func(pit_readback)(uint8_t cmd)
     }
 }
 
-static void __time_critical_func(pit_command)(uint8_t cmd)
-{
+static void __time_critical_func(pit_command)(uint8_t cmd) {
     uint8_t sc = (cmd >> 6) & 3;
 
     if (sc == 3) {
@@ -118,7 +115,7 @@ static void __time_critical_func(pit_command)(uint8_t cmd)
     }
 
     uint8_t rw = (cmd >> 4) & 3;
-    pit_channel_t* c = &pit_channels[sc];
+    pit_channel_t *c = &pit_channels[sc];
 
     if (rw == 0) {
         if (c->latched != 1) {
@@ -145,14 +142,13 @@ static void __time_critical_func(pit_command)(uint8_t cmd)
     pit_status_byte(c);
 }
 
-void __time_critical_func(pico_x86_pit_out)(uint16_t port, uint8_t val)
-{
+void __time_critical_func(pico_x86_pit_out)(uint16_t port, uint8_t val) {
     if (port == 0x43) {
         pit_command(val);
         return;
     }
 
-    pit_channel_t* c = &pit_channels[port - 0x40];
+    pit_channel_t *c = &pit_channels[port - 0x40];
 
     switch (c->rw_mode) {
     case 1:
@@ -180,9 +176,8 @@ void __time_critical_func(pico_x86_pit_out)(uint16_t port, uint8_t val)
     }
 }
 
-uint8_t __time_critical_func(pico_x86_pit_in)(uint16_t port)
-{
-    pit_channel_t* c = &pit_channels[port - 0x40];
+uint8_t __time_critical_func(pico_x86_pit_in)(uint16_t port) {
+    pit_channel_t *c = &pit_channels[port - 0x40];
 
     if (c->latched == 2) {
         c->latched = 0;
@@ -222,9 +217,8 @@ uint8_t __time_critical_func(pico_x86_pit_in)(uint16_t port)
     return result;
 }
 
-static void __always_inline pit_set_gate2(uint8_t level)
-{
-    pit_channel_t* c = &pit_channels[2];
+static void __always_inline pit_set_gate2(uint8_t level) {
+    pit_channel_t *c = &pit_channels[2];
     level = level ? 1 : 0;
     if (c->gate == level) {
         return;
@@ -252,14 +246,12 @@ static void __always_inline pit_set_gate2(uint8_t level)
     }
 }
 
-void __always_inline pico_x86_pit_set_speaker_control(uint8_t val)
-{
+void __always_inline pico_x86_pit_set_speaker_control(uint8_t val) {
     speaker_data_enable = (val >> 1) & 1;
     pit_set_gate2(val & 1);
 }
 
-static inline uint32_t __always_inline advance_pit_channel(pit_channel_t* c, uint32_t ticks)
-{
+static inline uint32_t __always_inline advance_pit_channel(pit_channel_t *c, uint32_t ticks) {
     if (!c->armed || !c->gate) {
         return 0;
     }
@@ -287,8 +279,7 @@ static inline uint32_t __always_inline advance_pit_channel(pit_channel_t* c, uin
     return events;
 }
 
-uint32_t __always_inline pico_x86_pit_advance(uint32_t ticks)
-{
+uint32_t __always_inline pico_x86_pit_advance(uint32_t ticks) {
     if (likely(ticks == 0)) {
         return 0;
     }
@@ -301,13 +292,12 @@ uint32_t __always_inline pico_x86_pit_advance(uint32_t ticks)
     return irq0_events;
 }
 
-uint32_t __always_inline(pico_x86_pit_channel2_freq_hz)(void)
-{
+uint32_t __always_inline(pico_x86_pit_channel2_freq_hz)(void) {
     if (!speaker_data_enable) {
         return 0;
     }
 
-    pit_channel_t* c = &pit_channels[2];
+    pit_channel_t *c = &pit_channels[2];
     if (!c->armed || !c->gate) {
         return 0;
     }
@@ -327,8 +317,7 @@ uint32_t __always_inline(pico_x86_pit_channel2_freq_hz)(void)
 uint8_t __always_inline pico_x86_pit_channel2_output_bit() { return pit_channels[2].output; }
 uint8_t __always_inline pico_x86_pit_speaker_data_enabled() { return speaker_data_enable; }
 
-uint8_t __always_inline pico_x86_pit_get_port61_state(uint8_t current_port61_val)
-{
+uint8_t __always_inline pico_x86_pit_get_port61_state(uint8_t current_port61_val) {
     current_port61_val &= ~0x30;
     current_port61_val |= (pit_channels[1].output << 4);
     current_port61_val |= (pit_channels[2].output << 5);

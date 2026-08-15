@@ -12,6 +12,7 @@
 
 #include "hardware/hazard3/features.h"
 #include <pico/util/queue.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -176,52 +177,52 @@ typedef struct __attribute__((aligned(2))) {
 // cpu regs
 typedef struct __attribute__((packed, aligned(2))) {
     union {
-        uint16_t AX;
+        uint16_t AX; // 0
         struct {
             uint8_t AL, AH;
         };
     };
     union {
-        uint16_t CX;
+        uint16_t CX; // 2
         struct {
             uint8_t CL, CH;
         };
     };
     union {
-        uint16_t DX;
+        uint16_t DX; // 4
         struct {
             uint8_t DL, DH;
         };
     };
     union {
-        uint16_t BX;
+        uint16_t BX; // 6
         struct {
             uint8_t BL, BH;
         };
     };
-    uint16_t SP;
-    uint16_t BP;
-    uint16_t SI;
-    uint16_t DI;
-    uint16_t ES;
-    uint16_t CS;
-    uint16_t SS;
-    uint16_t DS;
-    uint16_t ZERO;
-    uint16_t SCRATCH;
-    uint16_t IP;
-    uint8_t padding[10];
+    uint16_t SP;         // 8
+    uint16_t BP;         // 10
+    uint16_t SI;         // 12
+    uint16_t DI;         // 14
+    uint16_t ES;         // 16
+    uint16_t CS;         // 18
+    uint16_t SS;         // 20
+    uint16_t DS;         // 22
+    uint16_t ZERO;       // 24
+    uint16_t SCRATCH;    // 26
+    uint16_t IP;         // 28
+    uint8_t padding[10]; // 30
 
-    uint8_t CF;
-    uint8_t PF;
-    uint8_t AF;
-    uint8_t ZF;
+    uint8_t CF; // 40
+    uint8_t PF; // 41
+    uint8_t AF; // 42
+    uint8_t ZF; // 43
 
-    uint8_t SF;
-    uint8_t TF;
-    uint8_t IF;
-    uint8_t DF;
-    uint8_t OF;
+    uint8_t SF; // 44
+    uint8_t TF; // 45
+    uint8_t IF; // 46
+    uint8_t DF; // 47
+    uint8_t OF; // 48
 } cpu_t;
 
 #define CPU (*((cpu_t *)regs16))
@@ -233,7 +234,6 @@ enum power_button_action { POWER_ACTION_REBOOT = 0, POWER_ACTION_SCREENSHOT = 1 
 
 void pico_x86_run(void);
 void pico_x86_cpu(void);
-void pico_x86_timer_tick(void);
 uint8_t pico_x86_get_floppy_enabled(void);
 void pico_x86_set_floppy_enabled(uint8_t enabled);
 uint8_t pico_x86_get_power_action(void);

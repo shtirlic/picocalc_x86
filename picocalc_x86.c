@@ -82,8 +82,7 @@ static void __time_critical_func(display_render)() {
 }
 
 static bool __time_critical_func(sb_timer_callback)(struct repeating_timer *t) {
-    static int32_t e;
-    e = picocalc_southbridge_kb_read();
+    int32_t e = picocalc_southbridge_kb_read();
     if (e != -1 && kbd_queue) {
         queue_try_add(kbd_queue, &e);
     }
@@ -94,16 +93,15 @@ static struct repeating_timer sb_timer;
 static void init_sothbridge() {
     printf("\n▼ Southbridge Init...");
     picocalc_southbridge_init();
-    add_repeating_timer_ms(30, sb_timer_callback, NULL, &sb_timer);
+
+    alarm_pool_t *pool = alarm_pool_create_with_unused_hardware_alarm(1);
+    alarm_pool_add_repeating_timer_ms(pool, 16, sb_timer_callback, NULL, &sb_timer);
 
     printf("done\n");
 }
 
 static void __time_critical_func(second_core)() {
-
     init_sothbridge();
-    init_sound();
-    pico_x86_pit_timer_init();
     init_display();
     display_render();
     __unreachable();
@@ -119,6 +117,9 @@ static void loop() {
 
 static void init_peripherals() {
     printf("\n▼ Peripherals Init...");
+    pico_x86_pit_timer_init();
+    init_sound();
+
     multicore_reset_core1();
     multicore_launch_core1(second_core);
     printf("done\n");
