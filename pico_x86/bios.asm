@@ -76,9 +76,9 @@ main:
 
 ; These values (BIOS ID string, BIOS date and so forth) go at the very top of memory
 
-biosstr db	'PicoCalc x86 BIOS Rev.05 ', 0, 0
+biosstr db	'PicoCalc x86 BIOS Rev.06 ', 0, 0
 biosstr2 db	'Copyright (C) 2026, Serg Podtynnyi', 0, 0
-mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/15/26', 0, 0xfa, 0
+mem_top	db	0xea, 0, 0x01, 0, 0xf0, '08/20/26', 0, 0xfa, 0
 
 bios_entry:
 

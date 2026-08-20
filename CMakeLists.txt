@@ -5,18 +5,19 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(PICO_BOARD pico2)
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 set(PICO_PLATFORM rp2350-riscv)
 set(PICO_USE_STACK_GUARDS ON)
 # set(PICO_DEOPTIMIZED_DEBUG ON)
 set(PICO_TOOLCHAIN_PATH /opt/riscv/)
-set(PICO_COMMON_LANG_FLAGS " -march=rv32ima_zicsr_zifencei_zba_zbb_zbs_zbkb_zca_zcb_zcmp  -mabi=ilp32")
-
+set(PICO_COMMON_LANG_FLAGS " -march=rv32ima_zicsr_zifencei_zba_zbb_zbs_zbkb  -mabi=ilp32")
 include(/usr/share/pico-sdk/external/pico_sdk_import.cmake)
+set(PICO_DEFAULT_BOOT_STAGE2_FILE "${CMAKE_CURRENT_LIST_DIR}/empty_boot2.S")
+
 
 project(picocalc_x86
         LANGUAGES C CXX ASM
-        VERSION 0.0.5
+        VERSION 0.0.6
         DESCRIPTION "PicoCalc x86 Emulator on Raspberry Pi Pico 2"
 )
 

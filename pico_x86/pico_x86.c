@@ -31,7 +31,7 @@
 static uint8_t __aligned(4) sram[RAM_SIZE];
 uint8_t __scratch_y("cpu") *mem = nullptr;
 
-uint8_t __aligned(4) __scratch_x("io") io_ports[IO_PORT_COUNT] = {0};
+uint8_t __aligned(4) __scratch_y("io") io_ports[IO_PORT_COUNT] = {0};
 
 // Group 1: ModR/M Decode (Tables 0-7) - Indexed by 3-bit i_rm (0-7)
 static uint8_t __scratch_y("cpu") rm_decode_table[8][8];
